@@ -1,14 +1,14 @@
 .PHONY: all echo clean
 
-all: echo
+all: server
 clean: out
 	rm -rf out
 
-echo: cmd/echo/*.go internal/*/*.go
+server: cmd/server/*.go internal/*/*.go
 	[ -d out ] || mkdir out
-	go build -o out/echo_darwin ./cmd/echo/*.go
-	GOOS=linux GOARCH=arm64 go build -o out/echo_linux_arm64 ./cmd/echo/*.go
+	go build -o out/server_darwin ./cmd/server/*.go
+	GOOS=linux GOARCH=arm64 go build -o out/server_linux_arm64 ./cmd/server/*.go
 
-publish: echo
-	# ssh aws-proto "pkill -f echo_linux_arm64"
-	scp out/echo_linux_arm64 aws-proto:
+publish: server
+	# ssh aws-proto "pkill -f server_linux_arm64"
+	scp out/server_linux_arm64 aws-proto:
