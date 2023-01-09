@@ -8,11 +8,9 @@ import (
 	pc "proto-challenge/internal/helpers"
 )
 
-type Handler func(net.Conn)
-
 type Service struct {
 	name         string
-	handler_func Handler
+	handler_func pc.ServiceHandler
 }
 
 const (
@@ -24,6 +22,10 @@ func main() {
 		"echo": {
 			name:         "echo",
 			handler_func: pc.EchoHandler,
+		},
+		"prime": {
+			name:         "prime",
+			handler_func: pc.PrimeHandler,
 		},
 	}
 
@@ -61,6 +63,6 @@ func main() {
 		}
 		// Handle connections in a new goroutine.
 		pc.Log("proto: saw connection from: [%s]", conn.RemoteAddr())
-		go service.handler_func(conn)
+		go pc.ExecuteHandler(service.name, conn, service.handler_func)
 	}
 }
