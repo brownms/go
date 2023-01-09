@@ -3,56 +3,64 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io"
 	"net"
 	"os"
+	pc "proto-challenge/internal/helpers"
 )
+
+type Handler func(net.Conn)
+
+type Service struct {
+	name         string
+	handler_func Handler
+}
 
 const (
 	CONN_TYPE = "tcp"
 )
 
-func log(format string, args ...any) {
-	fmt.Printf(format+"\n", args...)
-}
-
 func main() {
+	services := map[string]Service{
+		"echo": {
+			name:         "echo",
+			handler_func: pc.EchoHandler,
+		},
+	}
+
 	// Parse flags
 	listen_host := flag.String("host", "localhost", "TCP bind host")
 	listen_port := flag.Int("port", 9999, "TCP listen port")
+	service_name := flag.String("service", "echo", "Service to run")
 
 	flag.Parse()
+
+	service, exists := services[*service_name]
+	if !exists {
+		pc.Log("proto: Service not supported: %v", *service_name)
+		os.Exit(1)
+	}
 
 	// Listen for incoming connections.
 	conn_spec := fmt.Sprintf("%v:%v", *listen_host, *listen_port)
 	listener, err := net.Listen(CONN_TYPE, conn_spec)
 	if err != nil {
-		log("Failed to listen %e", err.Error())
+		pc.Log("proto: Failed to listen %e", err.Error())
 		os.Exit(1)
 	}
 	// Close the listener when the application closes.
 	defer listener.Close()
 
-	log("Echo service started; Listening on %v", conn_spec)
+	pc.Log("proto: Started service: [%v]", service.name)
+	pc.Log("proto: Listening on [%v]", conn_spec)
 	for {
 		// Listen for an incoming connection.
 		conn, err := listener.Accept()
 		if err != nil {
-			log("Error accepting: ", err.Error())
+			pc.Log("proto: Error accepting: ", err.Error())
 			os.Exit(1)
 		}
 		// Handle connections in a new goroutine.
-		log("Saw connection from: %s", conn.RemoteAddr())
-		go handleRequest(conn)
-	}
-}
-
-func handleRequest(conn net.Conn) {
-	defer conn.Close()
-	bytesWritten, err := io.Copy(conn, conn)
-	if err != nil {
-		log("Error handling connection from %s => %v", conn.RemoteAddr(), err.Error())
-	} else {
-		log("Wrote %v bytes to: %s", bytesWritten, conn.RemoteAddr())
+		pc.Log("proto: saw connection from: [%s]", conn.RemoteAddr())
+		go service.handler_func(conn)
 	}
 }
