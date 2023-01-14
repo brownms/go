@@ -1,59 +1,76 @@
 package helpers
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 )
 
 type PrimeRequest struct {
-	method string
-	number int
+	Method string         `json:"method"`
+	Number *BigNumberJSON `json:"number"`
 }
 
 type PrimeResponse struct {
-	method string
-	prime  bool
+	Method string `json:"method"`
+	Prime  bool   `json:"prime"`
 }
 
 func PrimeHandler(conn net.Conn) (int64, error) {
 	defer conn.Close()
-	reqBytes, err := io.ReadAll(conn)
-	if err != nil {
-		return 0, errors.New(fmt.Sprintf("prime: Error reading from connection %s => %v", conn.RemoteAddr(), err.Error()))
+
+	scanner := bufio.NewScanner(conn)
+	total_bytes_written := 0
+
+	for scanner.Scan() {
+		response_str := handleRequest(scanner.Text())
+		bytes_written, err := conn.Write([]byte(response_str + "\n"))
+		total_bytes_written += bytes_written
+		if err != nil {
+			return int64(total_bytes_written), err
+		}
 	}
 
-	var request PrimeRequest
-	err = json.Unmarshal(reqBytes, &request)
+	if err := scanner.Err(); err != nil {
+		return 0, errors.New(fmt.Sprintf("prime: Error reading from connection %s => %v", conn.RemoteAddr(), err.Error()))
+	}
+	return int64(total_bytes_written), nil
+}
+
+func handleRequest(request_line string) string {
+	Log("prime: raw input => [%v]", string(request_line))
+	request := PrimeRequest{}
+	err := json.Unmarshal([]byte(request_line), &request)
 	if err != nil {
 		// failed to parse JSON
 		Log("prime: failed to parse JSON => %v", err.Error())
-		bytesWritten, err := conn.Write([]byte("Invalid JSON\n"))
-		if err != nil {
-			return int64(bytesWritten), err
-		}
-		return int64(bytesWritten), nil
+		return "Invalid JSON"
 	}
 
-	if request.method != "isPrime" {
+	if request.Method != "isPrime" {
 		// unsupported method
-		bytesWritten, err := conn.Write([]byte(fmt.Sprintf("Invalid Method: [%v]\n", request.method)))
-		if err != nil {
-			return int64(bytesWritten), err
-		}
-		return int64(bytesWritten), nil
+		return fmt.Sprintf("Invalid Method: [%v]", request.Method)
+	}
+
+	if request.Number == nil {
+		return fmt.Sprintf("Missing 'number' property")
+	}
+
+	var is_prime = false
+	if request.Number.int_val != nil && request.Number.int_val.ProbablyPrime(0) {
+		is_prime = true
 	}
 
 	response := PrimeResponse{
-		method: request.method,
-		prime:  true,
+		Method: request.Method,
+		Prime:  is_prime,
 	}
-	responseBytes, err := json.Marshal(response)
-	bytesWritten, err := conn.Write(responseBytes)
+
+	jsonBytes, err := json.Marshal(response)
 	if err != nil {
-		return int64(bytesWritten), err
+		return fmt.Sprintf("Failed to Marshal response [%v]\n", err.Error())
 	}
-	return int64(bytesWritten), nil
+	return string(jsonBytes)
 }
