@@ -3,46 +3,10 @@ package handlers
 import (
 	"bytes"
 	"encoding/binary"
-	"io"
-	"proto-challenge/internal/util"
 	"testing"
 )
 
-type TestConnection struct {
-	reader io.Reader
-	io.Writer
-	closed  bool
-	results [][]byte
-}
-
-func (conn *TestConnection) Read(p []byte) (n int, err error) {
-	return conn.reader.Read(p)
-}
-
-func (conn *TestConnection) Write(value []byte) (n int, err error) {
-	util.Log("Write: Saw bytes: %x => %d", value, value)
-	conn.results = append(conn.results, value)
-	return len(value), nil
-}
-
-func (conn *TestConnection) Close() error {
-	conn.closed = true
-	return nil
-}
-
-func (conn *TestConnection) IsClosed() bool {
-	return conn.closed
-}
-
-func NewTestConnection(source_bytes []byte) *TestConnection {
-	return &TestConnection{
-		closed:  false,
-		results: [][]byte{},
-		reader:  bytes.NewReader(source_bytes),
-	}
-}
-
-type TestResponse struct {
+type MeansTestResponse struct {
 	Value int32
 }
 
@@ -88,7 +52,7 @@ func TestMeans(t *testing.T) {
 	for _, b := range requests {
 		request_all_bytes = append(request_all_bytes, b...)
 	}
-	conn := NewTestConnection(request_all_bytes)
+	conn := NewTestConnectionFromBytes(request_all_bytes)
 	_, err := MeansHandler(conn)
 
 	if err != nil {
@@ -110,7 +74,7 @@ func TestMeans(t *testing.T) {
 	}
 
 	for i, expected := range expected_results {
-		var response TestResponse
+		var response MeansTestResponse
 		binary.Read(bytes.NewReader(conn.results[i]), binary.BigEndian, &response)
 		if response.Value != expected {
 			t.Errorf("handler: actual: %d; expected %d", response.Value, expected)
