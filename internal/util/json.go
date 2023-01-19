@@ -1,4 +1,4 @@
-package helpers
+package util
 
 import (
 	"fmt"
@@ -7,16 +7,16 @@ import (
 )
 
 type BigNumberJSON struct {
-	int_val   *big.Int
-	float_val *big.Float
+	IntVal   *big.Int
+	FloatVal *big.Float
 }
 
 func (b BigNumberJSON) MarshalJSON() ([]byte, error) {
-	if b.int_val != nil {
-		return []byte(b.int_val.String()), nil
+	if b.IntVal != nil {
+		return []byte(b.IntVal.String()), nil
 	}
-	if b.float_val != nil {
-		return []byte(b.float_val.String()), nil
+	if b.FloatVal != nil {
+		return []byte(b.FloatVal.String()), nil
 	}
 	return []byte(""), nil
 }
@@ -33,7 +33,7 @@ func (b *BigNumberJSON) UnmarshalJSON(bytes []byte) error {
 		if !ok {
 			return fmt.Errorf("not a valid big float: %s", bytes)
 		}
-		b.float_val = &value
+		b.FloatVal = &value
 		return nil
 	}
 
@@ -42,6 +42,6 @@ func (b *BigNumberJSON) UnmarshalJSON(bytes []byte) error {
 	if !ok {
 		return fmt.Errorf("not a valid big integer: %s", bytes)
 	}
-	b.int_val = &value
+	b.IntVal = &value
 	return nil
 }
