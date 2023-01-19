@@ -2,11 +2,12 @@ package helpers
 
 import (
 	"fmt"
+	"io"
 	"net"
 	"time"
 )
 
-type ServiceHandler func(net.Conn) (int64, error)
+type ServiceHandler func(conn io.ReadWriteCloser) (int64, error)
 
 func Log(format string, args ...any) {
 	fmt.Printf(format+"\n", args...)

@@ -3,9 +3,8 @@ package helpers
 import (
 	"bufio"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"net"
+	"io"
 )
 
 type PrimeRequest struct {
@@ -18,7 +17,7 @@ type PrimeResponse struct {
 	Prime  bool   `json:"prime"`
 }
 
-func PrimeHandler(conn net.Conn) (int64, error) {
+func PrimeHandler(conn io.ReadWriteCloser) (int64, error) {
 	defer conn.Close()
 
 	scanner := bufio.NewScanner(conn)
@@ -34,7 +33,7 @@ func PrimeHandler(conn net.Conn) (int64, error) {
 	}
 
 	if err := scanner.Err(); err != nil {
-		return 0, errors.New(fmt.Sprintf("prime: Error reading from connection %s => %v", conn.RemoteAddr(), err.Error()))
+		return 0, fmt.Errorf("prime: Error reading connection %w", err)
 	}
 	return int64(total_bytes_written), nil
 }

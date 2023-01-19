@@ -12,3 +12,9 @@ server: cmd/server/*.go internal/*/*.go
 publish: server
 	# ssh aws-proto "pkill -f server_linux_arm64"
 	scp out/server_linux_arm64 aws-proto:
+
+test:
+	go test -v ./internal/helpers
+
+scratch:
+	go run scratch.go
