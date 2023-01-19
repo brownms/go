@@ -3,7 +3,6 @@ package handlers
 import (
 	"bytes"
 	"io"
-	"proto-challenge/internal/util"
 	"testing"
 )
 
@@ -19,7 +18,7 @@ func (conn *TestConnection) Read(p []byte) (n int, err error) {
 }
 
 func (conn *TestConnection) Write(value []byte) (n int, err error) {
-	util.Log("Write: Saw bytes: %x => %d", value, value)
+	// util.Log("Write: Saw bytes: %x => %d", value, value)
 	conn.results = append(conn.results, value)
 	return len(value), nil
 }
@@ -45,19 +44,19 @@ func NewTestConnectionFromString(source_string string) *TestConnection {
 	return NewTestConnectionFromBytes([]byte(source_string))
 }
 
-type spec struct {
+type echoSpec struct {
 	input           string
 	expectedResults int
 	expectedOutput  string
 }
 
-func specFrom(in string, out string) spec {
+func echoSpecFrom(in string, out string) echoSpec {
 	expectedResults := 1
 	if len(out) == 0 {
 		// expect no results if the output is empty
 		expectedResults = 0
 	}
-	return spec{
+	return echoSpec{
 		input:           in,
 		expectedOutput:  out,
 		expectedResults: expectedResults,
@@ -65,10 +64,10 @@ func specFrom(in string, out string) spec {
 }
 
 func TestEcho(t *testing.T) {
-	specs := []spec{
-		specFrom("foo", "foo"),
-		specFrom("foo bar baz\nbat buzz\t", "foo bar baz\nbat buzz\t"),
-		specFrom("", ""),
+	specs := []echoSpec{
+		echoSpecFrom("foo", "foo"),
+		echoSpecFrom("foo bar baz\nbat buzz\t", "foo bar baz\nbat buzz\t"),
+		echoSpecFrom("", ""),
 	}
 
 	for _, spec := range specs {
