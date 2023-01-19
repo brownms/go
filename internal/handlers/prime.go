@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"proto-challenge/internal/util"
+	"strings"
 )
 
 type PrimeRequest struct {
@@ -25,7 +26,14 @@ func PrimeHandler(conn io.ReadWriteCloser) (int64, error) {
 	total_bytes_written := 0
 
 	for scanner.Scan() {
-		response_str := handleRequest(scanner.Text())
+		line := strings.TrimSpace(scanner.Text())
+		var response_str string
+		if len(line) > 0 {
+			response_str = handleRequest(line)
+		} else {
+			response_str = "Invalid Request"
+		}
+
 		bytes_written, err := conn.Write([]byte(response_str + "\n"))
 		total_bytes_written += bytes_written
 		if err != nil {
