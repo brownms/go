@@ -1,9 +1,10 @@
-package helpers
+package handlers
 
 import (
 	"bytes"
 	"encoding/binary"
 	"io"
+	"proto-challenge/internal/util"
 	"testing"
 )
 
@@ -19,7 +20,7 @@ func (conn *TestConnection) Read(p []byte) (n int, err error) {
 }
 
 func (conn *TestConnection) Write(value []byte) (n int, err error) {
-	Log("Write: Saw bytes: %x => %d", value, value)
+	util.Log("Write: Saw bytes: %x => %d", value, value)
 	conn.results = append(conn.results, value)
 	return len(value), nil
 }

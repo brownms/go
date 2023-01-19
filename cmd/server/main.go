@@ -3,14 +3,19 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"os"
-	pc "proto-challenge/internal/helpers"
+	handlers "proto-challenge/internal/handlers"
+	"proto-challenge/internal/util"
+	"time"
 )
+
+type ServiceHandler func(conn io.ReadWriteCloser) (int64, error)
 
 type Service struct {
 	name         string
-	handler_func pc.ServiceHandler
+	handler_func ServiceHandler
 }
 
 const (
@@ -21,15 +26,15 @@ func main() {
 	services := map[string]Service{
 		"echo": {
 			name:         "echo",
-			handler_func: pc.EchoHandler,
+			handler_func: handlers.EchoHandler,
 		},
 		"prime": {
 			name:         "prime",
-			handler_func: pc.PrimeHandler,
+			handler_func: handlers.PrimeHandler,
 		},
 		"means": {
 			name:         "means",
-			handler_func: pc.MeansHandler,
+			handler_func: handlers.MeansHandler,
 		},
 	}
 
@@ -42,7 +47,7 @@ func main() {
 
 	service, exists := services[*service_name]
 	if !exists {
-		pc.Log("proto: Service not supported: %v", *service_name)
+		util.Log("proto: Service not supported: %v", *service_name)
 		os.Exit(1)
 	}
 
@@ -50,23 +55,34 @@ func main() {
 	conn_spec := fmt.Sprintf("%v:%v", *listen_host, *listen_port)
 	listener, err := net.Listen(CONN_TYPE, conn_spec)
 	if err != nil {
-		pc.Log("proto: Failed to listen %e", err.Error())
+		util.Log("proto: Failed to listen %e", err.Error())
 		os.Exit(1)
 	}
 	// Close the listener when the application closes.
 	defer listener.Close()
 
-	pc.Log("proto: Started service: [%v]", service.name)
-	pc.Log("proto: Listening on [%v]", conn_spec)
+	util.Log("proto: Started service: [%v]", service.name)
+	util.Log("proto: Listening on [%v]", conn_spec)
 	for {
 		// Listen for an incoming connection.
 		conn, err := listener.Accept()
 		if err != nil {
-			pc.Log("proto: Error accepting: ", err.Error())
+			util.Log("proto: Error accepting: ", err.Error())
 			os.Exit(1)
 		}
 		// Handle connections in a new goroutine.
-		pc.Log("proto: saw connection from: [%s]", conn.RemoteAddr())
-		go pc.ExecuteHandler(service.name, conn, service.handler_func)
+		util.Log("proto: saw connection from: [%s]", conn.RemoteAddr())
+		go executeHandler(service.name, conn, service.handler_func)
+	}
+}
+
+func executeHandler(name string, conn net.Conn, handler ServiceHandler) {
+	start := time.Now()
+	bytesWritten, err := handler(conn)
+	elapsed := time.Since(start)
+	if err != nil {
+		util.Log("%v: Handler execution failed => %v (in %v)", name, err.Error(), elapsed)
+	} else {
+		util.Log("%v: Handler completed; Wrote %v bytes (in %v)", name, bytesWritten, elapsed)
 	}
 }

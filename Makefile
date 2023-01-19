@@ -14,7 +14,7 @@ publish: server
 	scp out/server_linux_arm64 aws-proto:
 
 test:
-	go test -v ./internal/helpers
+	go test -v ./internal/handlers
 
 scratch:
 	go run scratch.go

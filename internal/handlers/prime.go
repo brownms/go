@@ -1,15 +1,16 @@
-package helpers
+package handlers
 
 import (
 	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
+	"proto-challenge/internal/util"
 )
 
 type PrimeRequest struct {
-	Method string         `json:"method"`
-	Number *BigNumberJSON `json:"number"`
+	Method string              `json:"method"`
+	Number *util.BigNumberJSON `json:"number"`
 }
 
 type PrimeResponse struct {
@@ -39,12 +40,12 @@ func PrimeHandler(conn io.ReadWriteCloser) (int64, error) {
 }
 
 func handleRequest(request_line string) string {
-	Log("prime: raw input => [%v]", string(request_line))
+	util.Log("prime: raw input => [%v]", string(request_line))
 	request := PrimeRequest{}
 	err := json.Unmarshal([]byte(request_line), &request)
 	if err != nil {
 		// failed to parse JSON
-		Log("prime: failed to parse JSON => %v", err.Error())
+		util.Log("prime: failed to parse JSON => %v", err.Error())
 		return "Invalid JSON"
 	}
 
@@ -57,14 +58,9 @@ func handleRequest(request_line string) string {
 		return fmt.Sprintf("Missing 'number' property")
 	}
 
-	var is_prime = false
-	if request.Number.int_val != nil && request.Number.int_val.ProbablyPrime(0) {
-		is_prime = true
-	}
-
 	response := PrimeResponse{
 		Method: request.Method,
-		Prime:  is_prime,
+		Prime:  request.Number.IntVal != nil && request.Number.IntVal.ProbablyPrime(0),
 	}
 
 	jsonBytes, err := json.Marshal(response)
