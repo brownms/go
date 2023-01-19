@@ -27,6 +27,10 @@ func main() {
 			name:         "prime",
 			handler_func: pc.PrimeHandler,
 		},
+		"means": {
+			name:         "means",
+			handler_func: pc.MeansHandler,
+		},
 	}
 
 	// Parse flags
