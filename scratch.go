@@ -4,11 +4,16 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"regexp"
+	"strings"
 )
 
 func main() {
 	scannerBytes()
 	intToHex()
+	regExpExample()
+
+	fmt.Printf("empty => [%v]", strings.Join([]string{}, ","))
 }
 
 func scannerBytes() {
@@ -40,5 +45,23 @@ func intToHex() {
 	fmt.Println("intToHex ========>")
 	for _, value := range v {
 		fmt.Printf("Value Int::Hex ==> %v::%x\n", value, value)
+	}
+}
+
+type RegexpCheck struct {
+	pattern string
+	value   string
+}
+
+func regExpExample() {
+	checks := []RegexpCheck{
+		{pattern: `foo.*`, value: "seafood"},
+		{pattern: `^[A-Za-z0-9]*$`, value: "foobarbazBUZZ762w762"},
+		{pattern: `^[A-Za-z0-9]*$`, value: "foo_barbazBUZ+Z762w762"},
+	}
+
+	for _, check := range checks {
+		matched, err := regexp.Match(check.pattern, []byte(check.value))
+		fmt.Printf("Regexp: %v Matched: %v, Error: %v\n", check.pattern, matched, err)
 	}
 }
