@@ -48,12 +48,12 @@ func PrimeHandler(conn io.ReadWriteCloser) (int64, error) {
 }
 
 func handleRequest(request_line string) string {
-	util.Log("prime: raw input => [%v]", string(request_line))
+	util.Log.Debug("prime: raw input => [%v]", string(request_line))
 	request := PrimeRequest{}
 	err := json.Unmarshal([]byte(request_line), &request)
 	if err != nil {
 		// failed to parse JSON
-		util.Log("prime: failed to parse JSON => %v", err.Error())
+		util.Log.Info("prime: failed to parse JSON => %v", err.Error())
 		return "Invalid JSON"
 	}
 

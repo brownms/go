@@ -60,12 +60,14 @@ func main() {
 	listen_host := flag.String("host", "localhost", "Network bind host")
 	listen_port := flag.Int("port", 9999, "Network listen port")
 	service_name := flag.String("service", "echo", "Service to run")
+	log_level := flag.String("log", "info", "Enable debug logging")
 
 	flag.Parse()
 
+	util.Log.SetLevel(*log_level)
 	service, exists := services[*service_name]
 	if !exists {
-		util.Log("server: Service not supported: %v", *service_name)
+		util.Log.Error("server: Service not supported: %v", *service_name)
 		os.Exit(1)
 	}
 
@@ -76,7 +78,7 @@ func main() {
 	} else if service.protocol == PROTOCOL_UDP {
 		startUDP(conn_spec, &service)
 	} else {
-		util.Log("server: Protocal not supported: %v", service.protocol)
+		util.Log.Error("server: Protocal not supported: %v", service.protocol)
 		os.Exit(1)
 	}
 
@@ -90,8 +92,8 @@ func startTCP(conn_spec string, service *Service) {
 	// Close the listener when the application closes.
 	defer listener.Close()
 
-	util.Log("server: Started service: [%v]", service.name)
-	util.Log("server: TCP Listening on [%v]", conn_spec)
+	util.Log.Info("server: Started service: [%v]", service.name)
+	util.Log.Info("server: TCP Listening on [%v]", conn_spec)
 	for {
 		// Listen for an incoming connection.
 		connection, err := listener.Accept()
@@ -99,7 +101,7 @@ func startTCP(conn_spec string, service *Service) {
 			panic(fmt.Errorf("server: Error accepting connection: %w", err))
 		}
 		// Handle connections in a new goroutine.
-		util.Log("server: saw connection from: [%s]", connection.RemoteAddr())
+		util.Log.Info("server: saw connection from: [%s]", connection.RemoteAddr())
 		go executeHandler(connection, service)
 	}
 }
@@ -118,8 +120,8 @@ func startUDP(conn_spec string, service *Service) {
 	// Close the UDP connection when the application exits.
 	defer connection.Close()
 
-	util.Log("server: Started service: [%v]", service.name)
-	util.Log("server: UDP Listening on [%v]", conn_spec)
+	util.Log.Info("server: Started service: [%v]", service.name)
+	util.Log.Info("server: UDP Listening on [%v]", conn_spec)
 	for {
 		// Handle connections in a go routine
 		buffer := make([]byte, 1024)
@@ -127,7 +129,7 @@ func startUDP(conn_spec string, service *Service) {
 		if err != nil {
 			panic(fmt.Errorf("server: failed to read UDP => %w", err))
 		}
-		util.Log("server: Received request [%v bytes] from sender: [%v]", bytesRead, sendAddr.String())
+		util.Log.Info("server: Received request [%v bytes] from sender: [%v]", bytesRead, (*sendAddr).String())
 		requestReader := bytes.NewReader(buffer[:bytesRead])
 		udpWrapper := util.NewUdpRequestWrapper(connection, sendAddr, requestReader)
 		go executeHandler(udpWrapper, service)
@@ -139,8 +141,8 @@ func executeHandler(connection io.ReadWriteCloser, service *Service) {
 	bytesWritten, err := service.handlerFunc(connection)
 	elapsed := time.Since(start)
 	if err != nil {
-		util.Log("%v: Handler execution failed => %v (in %v)", service.name, err.Error(), elapsed)
+		util.Log.Warn("%v: Handler execution failed => %v (in %v)", service.name, err.Error(), elapsed)
 	} else {
-		util.Log("%v: Handler completed; Wrote %v bytes (in %v)", service.name, bytesWritten, elapsed)
+		util.Log.Info("%v: Handler completed; Wrote %v bytes (in %v)", service.name, bytesWritten, elapsed)
 	}
 }

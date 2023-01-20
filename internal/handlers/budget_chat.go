@@ -119,11 +119,11 @@ func ChatHandler(conn io.ReadWriteCloser) (int64, error) {
 		return 0, fmt.Errorf("chat: Error reading connection %w", err)
 	}
 	if session.state == StateJoined {
-		util.Log("chat: Session ended for Joined user: [%v]; broadcasting Exit", session.name)
+		util.Log.Info("chat: Session ended for Joined user: [%v]; broadcasting Exit", session.name)
 		session.Broadcast(MessageExit, nil)
 		delete(sessions, session.name)
 	} else {
-		util.Log("chat: Session ended for non-Joined user: [%v]", session.name)
+		util.Log.Info("chat: Session ended for non-Joined user: [%v]", session.name)
 	}
 	return session.bytes_written, nil
 }

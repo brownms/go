@@ -38,7 +38,6 @@ var kv_store = KeyValueStore{
 }
 
 func UdpKeyValueHandler(conn io.ReadWriteCloser) (int64, error) {
-	util.Log("udp_kv: UdpKeyValueHandler => entry.")
 	started := time.Now()
 	buffer := new(strings.Builder)
 	_, err := io.Copy(buffer, conn)
@@ -46,23 +45,24 @@ func UdpKeyValueHandler(conn io.ReadWriteCloser) (int64, error) {
 		return 0, fmt.Errorf("udp_kv: Failed to read request => %w", err)
 	}
 	request := strings.TrimSpace(buffer.String())
-	util.Log("udp_kv: Got request: [%v]", request)
+	util.Log.Debug("udp_kv: Got request: [%v]", request)
 	response := handleKvRequest(request)
-	util.Log("udp_kv: UDP handler completed: KV => [%v]", kv_store.values)
+	util.Log.Trace("udp_kv: UDP handler completed: KV => [%v]", kv_store.values)
 	if len(response) > 0 {
-		util.Log("udp_kv: Writing [%v] to UDP connection", response)
+		util.Log.Debug("udp_kv: Writing [%v] to UDP connection", response)
 		bytes_sent, err := conn.Write([]byte(response))
 		if err != nil {
 			return 0, fmt.Errorf("udp_kv: UDP write failed => %w", err)
 		}
-		util.Log("udp_kv: UDP handler completed: Sent %v bytes (in %v)", bytes_sent, time.Since(started))
+		util.Log.Info("udp_kv: UDP handler completed: Sent %v bytes (in %v)", bytes_sent, time.Since(started))
+		util.Log.Trace("udp_kv: UDP handler completed: Sent response: [%v]", response)
 		return int64(bytes_sent), nil
 	}
 	return 0, nil
 }
 
 func handleKvRequest(requestText string) string {
-	if len(requestText) == 0 || len(requestText) > 1000 {
+	if len(requestText) > 1000 {
 		return EMPTY_RESPONSE
 	}
 	key, value, hasEquals := strings.Cut(requestText, "=")
