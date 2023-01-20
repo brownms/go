@@ -59,7 +59,7 @@ func MeansHandler(conn io.ReadWriteCloser) (int64, error) {
 				Start: req.Num1,
 				End:   req.Num2,
 			})
-			util.Log("Query: Sending query result: %d", average)
+			util.Log.Debug("Query: Sending query result: %d", average)
 			binary.Write(conn, binary.BigEndian, average)
 			bytes_written += 4
 		}
@@ -68,11 +68,11 @@ func MeansHandler(conn io.ReadWriteCloser) (int64, error) {
 
 func handleQuery(values []Insert, query Query) int32 {
 	if query.End < query.Start {
-		util.Log("Query => Invalid; Start is after End; returning 0")
+		util.Log.Info("Query => Invalid; Start is after End; returning 0")
 		return 0
 	}
 
-	util.Log("Query: querying %v values between %v => %v", len(values), query.Start, query.End)
+	util.Log.Debug("Query: querying %v values between %v => %v", len(values), query.Start, query.End)
 	count := 0
 	total := 0
 	for _, v := range values {
@@ -81,7 +81,7 @@ func handleQuery(values []Insert, query Query) int32 {
 			total += int(v.Value)
 		}
 	}
-	util.Log("Query: Saw total of %d from %d matching values", total, count)
+	util.Log.Debug("Query: Saw total of %d from %d matching values", total, count)
 	if count == 0 {
 		return 0
 	}

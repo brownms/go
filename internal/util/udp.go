@@ -6,10 +6,6 @@ import (
 	"net"
 )
 
-func Log(format string, args ...any) {
-	fmt.Printf(format+"\n", args...)
-}
-
 type UdpRequestReadWriteCloser struct {
 	conn   *net.UDPConn
 	sender *net.UDPAddr
