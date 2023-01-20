@@ -36,6 +36,10 @@ func main() {
 			name:         "means",
 			handler_func: handlers.MeansHandler,
 		},
+		"chat": {
+			name:         "chat",
+			handler_func: handlers.ChatHandler,
+		},
 	}
 
 	// Parse flags

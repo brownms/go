@@ -8,11 +8,11 @@ import (
 	"proto-challenge/internal/util"
 )
 
-type RequestType byte
+type MeansRequestType byte
 
 const (
-	typeInsert RequestType = 'I' // 0x49
-	typeQuery  RequestType = 'Q' // 0x51
+	typeInsert MeansRequestType = 'I' // 0x49
+	typeQuery  MeansRequestType = 'Q' // 0x51
 )
 
 type Insert struct {
@@ -26,7 +26,7 @@ type Query struct {
 }
 
 type RawRequest struct {
-	Type RequestType
+	Type MeansRequestType
 	Num1 int32
 	Num2 int32
 }
