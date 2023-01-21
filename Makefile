@@ -19,10 +19,10 @@ run:
 	go run -v ./cmd/server/main.go -service=${SERVICE}
 
 test_quiet:
-	go test ./internal/handlers
+	go test ./...
 
 test:
-	go test -v ./internal/handlers
+	go test -v ./...
 
 scratch:
 	go run scratch.go

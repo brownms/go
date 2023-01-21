@@ -19,41 +19,41 @@ const (
 )
 
 type TcpServiceHandler func(conn io.ReadWriteCloser) (int64, error)
-type UdpServiceHandler func(listenAddress string) error
+type UdpServiceHandler func(seq int64, request string, conn io.Writer) error
 
 type Service struct {
-	protocol       Protocol
-	name           string
-	tcpHandlerFunc TcpServiceHandler
-	udpServerFunc  UdpServiceHandler
+	protocol  Protocol
+	name      string
+	handleTcp TcpServiceHandler
+	handleUdp UdpServiceHandler
 }
 
 func main() {
 	services := map[string]Service{
 		"echo": {
-			name:           "echo",
-			protocol:       PROTOCOL_TCP,
-			tcpHandlerFunc: handlers.EchoHandler,
+			name:      "echo",
+			protocol:  PROTOCOL_TCP,
+			handleTcp: handlers.EchoHandler,
 		},
 		"prime": {
-			name:           "prime",
-			protocol:       PROTOCOL_TCP,
-			tcpHandlerFunc: handlers.PrimeHandler,
+			name:      "prime",
+			protocol:  PROTOCOL_TCP,
+			handleTcp: handlers.PrimeHandler,
 		},
 		"means": {
-			name:           "means",
-			protocol:       PROTOCOL_TCP,
-			tcpHandlerFunc: handlers.MeansHandler,
+			name:      "means",
+			protocol:  PROTOCOL_TCP,
+			handleTcp: handlers.MeansHandler,
 		},
 		"chat": {
-			name:           "chat",
-			protocol:       PROTOCOL_TCP,
-			tcpHandlerFunc: handlers.ChatHandler,
+			name:      "chat",
+			protocol:  PROTOCOL_TCP,
+			handleTcp: handlers.ChatHandler,
 		},
 		"udp_kv": {
-			name:          "udp_kv",
-			protocol:      PROTOCOL_UDP,
-			udpServerFunc: handlers.KeyValueUdpServer,
+			name:      "udp_kv",
+			protocol:  PROTOCOL_UDP,
+			handleUdp: handlers.KeyValueUdpHandler,
 		},
 	}
 
@@ -109,7 +109,7 @@ func startTCP(conn_spec string, service *Service) {
 
 func executeTcpHandler(connection io.ReadWriteCloser, service *Service) {
 	start := time.Now()
-	bytesWritten, err := service.tcpHandlerFunc(connection)
+	bytesWritten, err := service.handleTcp(connection)
 	elapsed := time.Since(start)
 	if err != nil {
 		util.Log.Warn("%v: Handler execution failed => %v (in %v)", service.name, err.Error(), elapsed)
@@ -118,9 +118,51 @@ func executeTcpHandler(connection io.ReadWriteCloser, service *Service) {
 	}
 }
 
+type UdpWriter struct {
+	connection  *net.UDPConn
+	sendAddress *net.UDPAddr
+}
+
+func (w *UdpWriter) Write(value []byte) (n int, err error) {
+	return w.connection.WriteToUDP(value, w.sendAddress)
+}
+
 func startUDP(listenAddress string, service *Service) {
+	udpAddr, err := net.ResolveUDPAddr("udp", listenAddress)
+	if err != nil {
+		panic(fmt.Errorf("server: Failed to resolve UDP address from %v => %w", listenAddress, err))
+	}
+
+	connection, err := net.ListenUDP("udp", udpAddr)
+	if err != nil {
+		panic(fmt.Errorf("server: Failed to start UDP listen on %v => %w", udpAddr, err))
+	}
+
 	util.Log.Info("server: Starting service: [%v]", service.name)
-	err := service.udpServerFunc(listenAddress)
+	util.Log.Info("server: UDP Listening on [%v]", listenAddress)
+
+	reqNum := int64(0)
+	for {
+		// Handle connections in a go routine
+		buffer := make([]byte, 1024)
+		bytesRead, sendAddress, err := connection.ReadFromUDP(buffer)
+		if err != nil {
+			util.Log.Error("udp_server: failed to read UDP => %w", err)
+			continue
+		}
+		reqNum += 1
+		util.Log.Info("udp_server: [%v] Received [%v] bytes", reqNum, bytesRead)
+		request := string(buffer[:bytesRead])
+		err = service.handleUdp(reqNum, request, &UdpWriter{
+			connection:  connection,
+			sendAddress: sendAddress,
+		})
+		if err != nil {
+			util.Log.Error("udp_server: [%v] Handler returned Error %w", reqNum, err)
+			continue
+		}
+	}
+
 	if err != nil {
 		util.Log.Error("server: Service [%v] exited with error %w", service.name, err)
 		os.Exit(1)
