@@ -58,10 +58,16 @@ func regExpExample() {
 		{pattern: `foo.*`, value: "seafood"},
 		{pattern: `^[A-Za-z0-9]*$`, value: "foobarbazBUZZ762w762"},
 		{pattern: `^[A-Za-z0-9]*$`, value: "foo_barbazBUZ+Z762w762"},
+		{pattern: "(7[a-zA-Z0-9]{24,34})", value: "7F1u3wSD5RbOHQmupo9nx4TnhQ"},
+		{pattern: "(7[a-zA-Z0-9]{24,34})", value: "7F1uFFFFFFFFFFFFF000000000"},
+		{pattern: "(7[a-zA-Z0-9]{24,34})", value: "7iKDZEwPZSqIvDnHvVN2r0hUWXD5rHX"},
+		{pattern: "(7[a-zA-Z0-9]{24,34})", value: "7LOrwbDlS8NujgjddyogWgIM93MV5N2VR"},
+		{pattern: "(7[a-zA-Z0-9]{24,34})", value: "7adNeSwJkMakpEcln9HEtthSRtxdmEHOT8T"},
+		{pattern: "^7([a-zA-Z0-9]{24,34})", value: "FI7wNlVcf5hrqJECoN4bq4uNZgk"},
 	}
 
 	for _, check := range checks {
 		matched, err := regexp.Match(check.pattern, []byte(check.value))
-		fmt.Printf("Regexp: %v Matched: %v, Error: %v\n", check.pattern, matched, err)
+		fmt.Printf("Regexp: %v Matched: %v, Value: [%v]; Error: %v\n", check.pattern, matched, check.value, err)
 	}
 }

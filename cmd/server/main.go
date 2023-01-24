@@ -55,6 +55,11 @@ func main() {
 			protocol:  PROTOCOL_UDP,
 			handleUdp: handlers.KeyValueUdpHandler,
 		},
+		"mob": {
+			name:      "mob",
+			protocol:  PROTOCOL_TCP,
+			handleTcp: handlers.ChatMobProxyHandler,
+		},
 	}
 
 	// Parse flags
