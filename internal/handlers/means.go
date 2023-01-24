@@ -60,7 +60,10 @@ func MeansHandler(conn io.ReadWriteCloser) (int64, error) {
 				End:   req.Num2,
 			})
 			util.Log.Debug("Query: Sending query result: %d", average)
-			binary.Write(conn, binary.BigEndian, average)
+			err := binary.Write(conn, binary.BigEndian, average)
+			if err != nil {
+				return 0, fmt.Errorf("writing data %w", err)
+			}
 			bytes_written += 4
 		}
 	}

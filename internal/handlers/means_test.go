@@ -75,7 +75,11 @@ func TestMeans(t *testing.T) {
 
 	for i, expected := range expected_results {
 		var response MeansTestResponse
-		binary.Read(bytes.NewReader(conn.results[i]), binary.BigEndian, &response)
+		err := binary.Read(bytes.NewReader(conn.results[i]), binary.BigEndian, &response)
+		if err != nil {
+			t.Errorf("handler: caugh error %v", err.Error())
+			t.FailNow()
+		}
 		if response.Value != expected {
 			t.Errorf("handler: actual: %d; expected %d", response.Value, expected)
 			t.FailNow()

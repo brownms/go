@@ -63,7 +63,7 @@ func handleRequest(request_line string) string {
 	}
 
 	if request.Number == nil {
-		return fmt.Sprintf("Missing 'number' property")
+		return "Missing 'number' property"
 	}
 
 	response := PrimeResponse{
