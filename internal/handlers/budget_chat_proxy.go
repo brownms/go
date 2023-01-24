@@ -24,7 +24,6 @@ type ProxySession struct {
 	id     int64
 	source *ProxyConn
 	target *ProxyConn
-	status ChatState
 }
 
 var bogusCoinRegexp = regexp.MustCompile("^7([a-zA-Z0-9]{24,34})")

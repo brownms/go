@@ -140,7 +140,7 @@ func validateName(name string) (string, error) {
 		return name, fmt.Errorf("failed to check name: %w", err)
 	}
 	if !match {
-		return name, errors.New(fmt.Sprintf("invalid name: %v", name))
+		return name, fmt.Errorf("invalid name: %v", name)
 	}
 	return name, nil
 }
