@@ -9,11 +9,13 @@ import (
 )
 
 func main() {
+	fmt.Printf("empty => [%v]", strings.Join([]string{}, ","))
+
 	scannerBytes()
 	intToHex()
 	regExpExample()
+	scanBytes()
 
-	fmt.Printf("empty => [%v]", strings.Join([]string{}, ","))
 }
 
 func scannerBytes() {
@@ -70,4 +72,17 @@ func regExpExample() {
 		matched, err := regexp.Match(check.pattern, []byte(check.value))
 		fmt.Printf("Regexp: %v Matched: %v, Value: [%v]; Error: %v\n", check.pattern, matched, check.value, err)
 	}
+}
+
+func scanBytes() {
+	reader := strings.NewReader("this is a very long string that has many characters and just as many bytes")
+	scanner := bufio.NewScanner(reader)
+	scanner.Split(bufio.ScanBytes)
+	i := 0
+	for scanner.Scan() {
+		b := scanner.Bytes()
+		fmt.Printf("byte[%v] => %v [%x]\n", i, string(b), b)
+		i += 1
+	}
+
 }
