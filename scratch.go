@@ -3,18 +3,26 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"flag"
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 )
 
 func main() {
-	fmt.Printf("empty => [%v]", strings.Join([]string{}, ","))
+	timerOnly := flag.Bool("timer", false, "Run timer function only")
 
-	scannerBytes()
-	intToHex()
-	regExpExample()
-	scanBytes()
+	flag.Parse()
+
+	if *timerOnly {
+		timer(2 * time.Second)
+	} else {
+		scannerBytes()
+		intToHex()
+		regExpExample()
+		scanBytes()
+	}
 
 }
 
@@ -84,5 +92,37 @@ func scanBytes() {
 		fmt.Printf("byte[%v] => %v [%x]\n", i, string(b), b)
 		i += 1
 	}
+}
 
+func timer(interval time.Duration) {
+	fmt.Printf("Starting a ticker every %v\n", interval)
+	ticker := time.NewTicker(interval)
+
+	intervalTask := func() {
+		fmt.Println("This is interval task")
+	}
+
+	// Creating channel using make
+	tickerChan := make(chan bool)
+
+	go func() {
+		for {
+			select {
+			case <-tickerChan:
+				ticker.Stop()
+				return
+			// interval task
+			case tm := <-ticker.C:
+				fmt.Println("The Current time is: ", tm)
+				intervalTask()
+			}
+		}
+	}()
+
+	time.Sleep(10 * time.Second)
+
+	// Setting the value of channel, which stops the ticker
+	tickerChan <- true
+
+	fmt.Println("Ticker is turned off!")
 }

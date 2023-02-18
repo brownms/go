@@ -5,87 +5,98 @@ import (
 	"fmt"
 	"io"
 	"proto-challenge/internal/util"
+	"sync"
 )
 
-var allMessages []interface{}
+type MessageHandler interface {
+	accept(*Client, interface{}) error
+	stop(*Client)
+}
 
-func Dispatch(msg interface{}) {
-	util.Log.Debug("dispatching message: %+v\n", msg)
-	allMessages = append(allMessages, msg)
+var monitorState = &SpeedMonitor{
+	cars:              make(map[string]Car),
+	limits:            make(map[uint16]uint16),
+	clients:           make(map[uint16]*Client),
+	dispatchersByRoad: make(map[uint16][]*Client),
+	ticketsState:      make(map[msgOutTicket]bool),
+	ticketMutex:       sync.Mutex{},
 }
 
 func SpeedDaemonHandler(conn io.ReadWriteCloser) (int64, error) {
-	defer conn.Close()
+	return monitorConnection(conn, monitorState)
+}
+
+var clientId = 0
+var clientMutex = sync.Mutex{}
+
+func nextClientId() uint16 {
+	clientMutex.Lock()
+	defer clientMutex.Unlock()
+	clientId += 1
+	return uint16(clientId)
+}
+
+func monitorConnection(conn io.ReadWriteCloser, monitor MessageHandler) (int64, error) {
+
+	client := &Client{
+		id:   nextClientId(),
+		conn: &conn,
+	}
+	defer monitor.stop(client)
 
 	scanner := bufio.NewScanner(conn)
 	scanner.Split(bufio.ScanBytes)
 
-	bytesWritten := int64(0)
-
 	fieldLen := 0
 	fieldBytes := []byte{}
 	msgFields := [][]byte{}
+	messageCount := 0
 	var strat strategy
 	for scanner.Scan() {
 		nextByte := scanner.Bytes()[0]
 		util.Log.Trace("visiting nextByte => [%x]", nextByte)
 		if strat.typeIndicator == msgType_None {
 			// start of new message
+			messageCount += 1
 			fieldLen = 0
 			fieldBytes = []byte{}
 			msgFields = [][]byte{}
 			s, ok := strategies[speedMsgType(nextByte)]
 			if !ok {
-				return bytesWritten, fmt.Errorf("invalid message type indicator %x", nextByte)
+				return client.bytesSent, fmt.Errorf("invalid message type indicator %x", nextByte)
 			}
 			strat = s
-			util.Log.Debug("detected new message [%v] (type: %v, num fields: %v)", len(allMessages)+1, strat.name, len(strat.fieldTypes))
+			util.Log.Trace("detected new message [%v] (type: %v, num fields: %v)", messageCount+1, strat.name, len(strat.fieldTypes))
 			if len(strat.fieldTypes) == 0 {
 				msg, err := strat.parse(msgFields)
 				if err != nil {
-					return bytesWritten, err
+					return client.bytesSent, err
 				}
 				// reset strategy to start new message
 				strat = strategy{}
-				Dispatch(msg)
+				err = monitor.accept(client, msg)
+				if err != nil {
+					return client.bytesSent, err
+				}
 			}
 			continue
 		}
 
 		fieldNum := len(msgFields)
 		fieldType := strat.fieldTypes[fieldNum]
-		// append byte if not at end of current field
-		if fieldType == u8 {
-			util.Log.Trace("tracking u8 field (field %v of %v) current size: (%v)", fieldNum, len(strat.fieldTypes), len(fieldBytes))
-			if len(fieldBytes) == 0 {
-				fieldBytes = []byte{nextByte}
-			}
-			if len(fieldBytes) == 1 {
-				msgFields = append(msgFields, fieldBytes)
-			}
-		}
-
-		if fieldType == u16 {
-			util.Log.Trace("tracking u16 field (field %v of %v) current size: (%v)", fieldNum, len(strat.fieldTypes), len(fieldBytes))
-			if len(fieldBytes) < 2 {
+		fieldTypeByteLength, ok := fieldTypeByteLengths[fieldType]
+		if ok {
+			// fixed-length field
+			// append byte if not at end of current field
+			util.Log.Trace("tracking %v field (field %v of %v) current size: (%v)", fieldType, fieldNum, len(strat.fieldTypes), len(fieldBytes))
+			if len(fieldBytes) < fieldTypeByteLength {
 				fieldBytes = append(fieldBytes, nextByte)
 			}
-			if len(fieldBytes) == 2 {
+			if len(fieldBytes) == fieldTypeByteLength {
 				msgFields = append(msgFields, fieldBytes)
 			}
-		}
-
-		if fieldType == u32 {
-			util.Log.Trace("tracking u32 field (field %v of %v) current size: (%v)", fieldNum, len(strat.fieldTypes), len(fieldBytes))
-			if len(fieldBytes) < 4 {
-				fieldBytes = append(fieldBytes, nextByte)
-			}
-			if len(fieldBytes) == 4 {
-				msgFields = append(msgFields, fieldBytes)
-			}
-		}
-
-		if fieldType == str || fieldType == arr_u16 {
+		} else {
+			// variable-length (length-prefixed) field
 			if fieldLen == 0 {
 				fieldLen = int(uint8(nextByte))
 				if fieldType == arr_u16 {
@@ -118,17 +129,20 @@ func SpeedDaemonHandler(conn io.ReadWriteCloser) (int64, error) {
 			if err != nil {
 				util.Log.Warn("failed to parse message (type: %v): %x => %v", strat.name, msgFields, err.Error())
 			} else {
-				util.Log.Trace("message %v complete (type: %v) => [%x]", len(allMessages)+1, strat.name, msgFields)
+				util.Log.Trace("message complete (type: %v) => [%x]", messageCount, strat.name, msgFields)
 			}
 			// reset strategy to start new message
 			strat = strategy{}
-			Dispatch(msg)
+			err = monitor.accept(client, msg)
+			if err != nil {
+				return client.bytesSent, err
+			}
 		}
 	}
 
 	if scanner.Err() != nil {
-		return bytesWritten, fmt.Errorf("scanning connection %w", scanner.Err())
+		return client.bytesSent, fmt.Errorf("scanning connection %w", scanner.Err())
 	}
 
-	return bytesWritten, nil
+	return client.bytesSent, nil
 }
