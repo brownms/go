@@ -74,17 +74,26 @@ type testData struct {
 	message interface{}
 }
 
-func TestSpeedMessageParsing(t *testing.T) {
-	// util.Log.SetLevel("trace")
-	rand.Seed(time.Now().UnixMilli())
-	requestMessages := []testData{}
-	for i := 1; i <= TestScale; i++ {
-		mType, message := randMsg()
-		requestMessages = append(requestMessages, testData{mType: mType, message: message})
-	}
+type testMonitor struct {
+	messages []interface{}
+	stopped  bool
+}
 
+func (m *testMonitor) accept(client *Client, rawMessage interface{}) error {
+	m.messages = append(m.messages, rawMessage)
+	return nil
+}
+
+func (m *testMonitor) stop(client *Client) {
+	m.stopped = true
+}
+
+func (m *testMonitor) size() int {
+	return len(m.messages)
+}
+
+func buildTestRequestBytes(t *testing.T, requestMessages []testData) []byte {
 	request := new(bytes.Buffer)
-
 	for i, msg := range requestMessages {
 		strat := strategies[msg.mType]
 		msgBytes, err := strat.serialize(msg.message)
@@ -95,28 +104,41 @@ func TestSpeedMessageParsing(t *testing.T) {
 		request.Write(msgBytes)
 		fmt.Printf("wrote message [%v of %v] [%+v] => bytes[%+x]\n", i+1, len(requestMessages), msg, msgBytes)
 	}
-
-	requestBytes := request.Bytes()
-	if len(requestBytes) == 0 {
+	b := request.Bytes()
+	if len(b) == 0 {
 		t.FailNow()
 	}
+	return b
+}
 
+func TestSpeedMessageParsing(t *testing.T) {
+	// util.Log.SetLevel("trace")
+	rand.Seed(time.Now().UnixMilli())
+
+	requestMessages := []testData{}
+	for i := 1; i <= TestScale; i++ {
+		mType, message := randMsg()
+		requestMessages = append(requestMessages, testData{mType: mType, message: message})
+	}
+
+	requestBytes := buildTestRequestBytes(t, requestMessages)
 	fmt.Printf("wrote %v messages to request with %v total bytes =>[%x]\n", len(requestMessages), len(requestBytes), requestBytes)
 
+	monitor := &testMonitor{}
 	conn := NewTestConnectionFromBytes(requestBytes)
-	_, err := SpeedDaemonHandler(conn)
+	_, err := monitorConnection(conn, monitor)
 	if err != nil {
-		t.Errorf("handler error (msg %v of %v): => %v", len(allMessages)+1, len(requestMessages), err.Error())
+		t.Errorf("handler error (msg %v of %v): => %v", monitor.size()+1, len(requestMessages), err.Error())
 		t.FailNow()
 	}
 
-	if len(allMessages) != len(requestMessages) {
-		t.Errorf("message parsing failed; saw %v messages but expected %v", len(allMessages), len(requestMessages))
+	if monitor.size() != len(requestMessages) {
+		t.Errorf("message parsing failed; saw %v messages but expected %v", monitor.size(), len(requestMessages))
 		t.FailNow()
 	}
 
 	for i, testData := range requestMessages {
-		actual := allMessages[i]
+		actual := monitor.messages[i]
 		expected := testData.message
 		fmt.Printf("comparing actual: [%+v] to expected: [%+v]\n", actual, expected)
 		if !reflect.DeepEqual(expected, actual) {
@@ -126,5 +148,82 @@ func TestSpeedMessageParsing(t *testing.T) {
 		fmt.Printf("correctly read message => [%+v]\n", actual)
 	}
 
+	if !monitor.stopped {
+		t.Errorf("failed to stop monitor for connection")
+		t.FailNow()
+	}
+
 	fmt.Printf("all %v messages correctly parsed\n", len(requestMessages))
 }
+
+func TestSpeedComputation(t *testing.T) {
+	tests := []struct {
+		o1     Observation
+		o2     Observation
+		expect float64
+	}{
+		{
+			o1:     Observation{mile: 20, timestamp: 10000},
+			o2:     Observation{mile: 21, timestamp: 10002},
+			expect: 1800,
+		},
+		{
+			o1:     Observation{mile: 20, timestamp: 10000},
+			o2:     Observation{mile: 35, timestamp: 10400},
+			expect: 135,
+		},
+		{
+			o1:     Observation{mile: 20, timestamp: 10000},
+			o2:     Observation{mile: 35, timestamp: 10477},
+			expect: 113,
+		},
+		{
+			o1:     Observation{mile: 20, timestamp: 10000},
+			o2:     Observation{mile: 5, timestamp: 10477},
+			expect: 113,
+		},
+	}
+
+	for _, test := range tests {
+		actual := computeSpeedMph(test.o1, test.o2)
+		if actual != test.expect {
+			t.Errorf("incorrect speed calculated: [%v]; expected => [%+v]", actual, test)
+			t.FailNow()
+		}
+	}
+
+}
+
+// func TestHeartbeat(t *testing.T) {
+// 	monitor := testMonitor{}
+
+// 	requestMessages := []testData{}
+// 	requestMessages = append(requestMessages, testData{
+// 		mType: msgType_iWantHeartbeat,
+// 		message: msgInWantHeartbeat{
+// 			mType:    msgType_iWantHeartbeat,
+// 			interval: uint32(10), // every 1 seconds
+// 		},
+// 	})
+// 	requestBytes := buildTestRequestBytes(t, requestMessages)
+
+// 	conn := NewTestConnectionFromBytes(requestBytes)
+// 	_, err := monitorConnection(conn, &monitor)
+// 	if err != nil {
+// 		t.Errorf("handler error (msg %v of %v): => %v", monitor.size()+1, len(requestMessages), err.Error())
+// 		t.FailNow()
+// 	}
+// 	time.Sleep(10 * time.Second)
+// 	if monitor.size() < 5 {
+// 		t.Errorf("message parsing failed; saw %v messages but expected at least %v", monitor.size(), 5)
+// 		t.FailNow()
+// 	}
+
+// 	fmt.Printf("received [%v] messages", monitor.size())
+// 	if !monitor.stopped {
+// 		t.Errorf("failed to stop monitor for connection")
+// 		t.FailNow()
+// 	}
+
+// 	fmt.Printf("all %v messages correctly parsed\n", len(requestMessages))
+// }

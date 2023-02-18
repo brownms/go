@@ -27,6 +27,12 @@ const (
 	msgType_oError         speedMsgType = 0x10 // 16
 )
 
+var fieldTypeByteLengths = map[fieldType]int{
+	u8:  1,
+	u16: 2,
+	u32: 4,
+}
+
 func toUint16(bytes []byte) uint16 {
 	return binary.BigEndian.Uint16(bytes)
 }
@@ -44,6 +50,10 @@ func writeString(w io.Writer, strValue string) error {
 		return err
 	}
 	return nil
+}
+
+func errorMessage(message string) msgOutError {
+	return msgOutError{mType: msgType_oError, errorMessage: message}
 }
 
 // Incoming messages (Client => Server)
@@ -294,7 +304,7 @@ var strategies = map[speedMsgType]strategy{
 	},
 
 	msgType_oTicket: {
-		typeIndicator: msgType_oHeartbeat,
+		typeIndicator: msgType_oTicket,
 		fieldTypes:    []fieldType{str, u16, u16, u32, u16, u32, u16},
 		name:          "Ticket",
 		parse: func(msgBytes [][]byte) (interface{}, error) {

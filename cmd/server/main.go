@@ -60,6 +60,11 @@ func main() {
 			protocol:  PROTOCOL_TCP,
 			handleTcp: handlers.ChatMobProxyHandler,
 		},
+		"speed": {
+			name:      "speed",
+			protocol:  PROTOCOL_TCP,
+			handleTcp: handlers.SpeedDaemonHandler,
+		},
 	}
 
 	// Parse flags

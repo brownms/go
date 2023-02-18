@@ -7,8 +7,7 @@ import (
 )
 
 type TestConnection struct {
-	reader io.Reader
-	io.Writer
+	reader  io.Reader
 	closed  bool
 	results [][]byte
 }
