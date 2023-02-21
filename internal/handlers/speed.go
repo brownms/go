@@ -19,7 +19,7 @@ var monitorState = &SpeedMonitor{
 	clients:           make(map[uint16]*Client),
 	dispatchersByRoad: make(map[uint16][]*Client),
 	ticketsState:      make(map[msgOutTicket]bool),
-	ticketMutex:       sync.Mutex{},
+	stateMutex:        sync.Mutex{},
 }
 
 func SpeedDaemonHandler(conn io.ReadWriteCloser) (int64, error) {

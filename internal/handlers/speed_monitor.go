@@ -41,16 +41,20 @@ func (c *Client) startHeartbeat(intervalDeciSeconds uint32) error {
 	// deciseconds (10 per second; e.g. 25 = 2.5 seconds)
 	intervalDuration := time.Duration(intervalDeciSeconds*100) * time.Millisecond
 	ticker := time.NewTicker(intervalDuration)
+	sendCount := 0
 	go func() {
 		for {
 			select {
 			case currentTime := <-ticker.C:
-				util.Log.Info("[client:%v] sending heartbeat message [at %v]", c.id, currentTime)
+				if sendCount == 0 || sendCount%10 == 0 {
+					util.Log.Debug("[client:%v] sending heartbeat message [count: %v; sent: %v]", c.id, sendCount, currentTime)
+				}
 				if err := c.send(msgOutHeartbeat{mType: msgType_oHeartbeat}); err != nil {
 					util.Log.Error("[client:%v] failed to send heartbeat message [at %v] => %v", c.id, err.Error())
 					ticker.Stop()
 					c.disconnect()
 				}
+				sendCount += 1
 			}
 		}
 	}()
@@ -116,7 +120,7 @@ func (c *Client) shutdown() {
 		util.Log.Info("[client:%v] stopped heartbeat ticker", c.id)
 		c.heartbeat.Stop()
 	}
-	util.Log.Info("[client:%v] shutdown completed", c.id)
+	util.Log.Trace("[client:%v] shutdown completed; sent %v bytes", c.id, c.bytesSent)
 }
 
 type Dispatcher struct {
@@ -138,6 +142,7 @@ type Observation struct {
 type Car struct {
 	plate              string
 	observationsByRoad map[uint16][]Observation
+	ticketsByDay       map[uint32]*msgOutTicket
 }
 
 func (c *Car) observe(road uint16, mile uint16, timestamp uint32) {
@@ -151,26 +156,44 @@ func (c *Car) observe(road uint16, mile uint16, timestamp uint32) {
 	c.observationsByRoad[road] = observations // necessary ?
 }
 
+func (c *Car) trackTicket(ticket *msgOutTicket) {
+	day := dayNumber(ticket)
+	util.Log.Debug("plate: [%v] => ticketed on day: [%v] => [%+v]", ticket.plate, day, ticket)
+	c.ticketsByDay[day] = ticket
+}
+
+func (c *Car) wasTicketedOn(day uint32) bool {
+	if ticket, ok := c.ticketsByDay[day]; ok {
+		util.Log.Debug("plate: [%v] => already ticketed on day: [%v] => [%+v]", ticket.plate, day, ticket)
+		return true
+	}
+	return false
+}
+
 type SpeedMonitor struct {
 	cars              map[string]Car
 	limits            map[uint16]uint16
 	clients           map[uint16]*Client
 	dispatchersByRoad map[uint16][]*Client
-
-	ticketsState map[msgOutTicket]bool
-	ticketMutex  sync.Mutex
+	ticketsState      map[msgOutTicket]bool
+	stateMutex        sync.Mutex
 }
 
 const (
-	hourSeconds = float64(60 * 60)
+	hourSeconds = 3600
+	daySeconds  = 86400
 )
+
+func dayNumber(ticket *msgOutTicket) uint32 {
+	return ticket.timestamp2 / 86400
+}
 
 func computeSpeedMph(obs1 Observation, obs2 Observation) float64 {
 	distance := math.Abs(float64(obs2.mile) - float64(obs1.mile))
 	timeDiffSeconds := math.Abs(float64(obs2.timestamp - obs1.timestamp))
 	timeDiffHours := timeDiffSeconds / hourSeconds
 	speedMph := distance / timeDiffHours
-	util.Log.Info("computeSpeedMph: saw car cover %vmi in %vs (%.4fh) => speed: %v", distance, timeDiffSeconds, timeDiffHours, speedMph)
+	util.Log.Trace("computeSpeedMph: saw car cover %vmi in %vs (%.4fh) => speed: %v", distance, timeDiffSeconds, timeDiffHours, speedMph)
 	return math.Round(speedMph)
 }
 
@@ -191,10 +214,21 @@ func (m *SpeedMonitor) sendPendingTickets() error {
 		// find dispatcher
 		dispatcher := m.findDispatcher(ticket.road)
 		if dispatcher != nil {
+			car, ok := m.cars[ticket.plate]
+			if !ok {
+				return fmt.Errorf("[client:%v] refusing to send ticket to plate [%v] with untracked car => [%+v]", dispatcher.id, ticket.plate, ticket)
+			}
+			day := dayNumber(&ticket)
+			if car.wasTicketedOn(day) {
+				util.Log.Info("[client:%v] plate [%v]; already ticketed for day [%v] => [%+v]", dispatcher.id, ticket.plate, day, ticket)
+				return nil
+			}
+			util.Log.Info("[client:%v] sending ticket for plate: [%v] on day: [%v] => [%+v]", dispatcher.id, car.plate, day, ticket)
 			err := dispatcher.send(ticket)
 			if err != nil {
 				return fmt.Errorf("[client:%v] sending ticket: [%+v] => %w", dispatcher.id, ticket, err)
 			}
+			car.trackTicket(&ticket)
 			m.ticketsState[ticket] = true
 		}
 	}
@@ -206,8 +240,6 @@ func (m *SpeedMonitor) checkForTickets(car Car, road uint16) error {
 	if len(observations) < 2 {
 		return nil
 	}
-	m.ticketMutex.Lock()
-	defer m.ticketMutex.Unlock()
 	limit, ok := m.limits[road]
 	if !ok {
 		return fmt.Errorf("observation for road [%v] without camera", road)
@@ -221,8 +253,9 @@ func (m *SpeedMonitor) checkForTickets(car Car, road uint16) error {
 			obs2 = observations[i]
 		}
 		speedMph := computeSpeedMph(obs1, obs2)
-		util.Log.Debug("plate [%v] was going [%vmph] on road: [%v]", car.plate, speedMph, road)
-		if speedMph > float64(limit) {
+		exceedsLimit := speedMph > float64(limit)
+		util.Log.Debug("plate [%v] was going [%vmph] on road: [%v] with limit [%v]; exceeds: [%v]", car.plate, speedMph, road, limit, exceedsLimit)
+		if exceedsLimit {
 			// generate ticket
 			ticket := msgOutTicket{
 				mType:      msgType_oTicket,
@@ -247,12 +280,17 @@ func (m *SpeedMonitor) stop(client *Client) {
 	util.Log.Trace("[client:%v] stopping", client.id)
 	client.shutdown()
 	delete(m.clients, client.id)
-	util.Log.Trace("[client:%v] stopped", client.id)
+	util.Log.Info("[client:%v] stopped; sent %v bytes", client.id, client.bytesSent)
 }
 
 func (m *SpeedMonitor) accept(client *Client, rawMessage interface{}) error {
-	util.Log.Debug("[client:%v] accepting message [%T]: %+v", client.id, rawMessage, rawMessage)
+	// obtain lock to ensure only one concurrent writer to state
+	// TODO => could make this more granular to speed up handling, but messages
+	// are small and inexpensive; forcing serial handling is probably fine
+	m.stateMutex.Lock()
+	defer m.stateMutex.Unlock()
 
+	util.Log.Debug("[client:%v] accepting message [%T]: %+v", client.id, rawMessage, rawMessage)
 	switch msg := rawMessage.(type) {
 	case msgInAmCamera:
 		if !client.isNew() {
@@ -297,7 +335,11 @@ func (m *SpeedMonitor) accept(client *Client, rawMessage interface{}) error {
 		// track plate position & time
 		car, ok := m.cars[msg.plate]
 		if !ok {
-			car = Car{plate: msg.plate, observationsByRoad: map[uint16][]Observation{}}
+			car = Car{
+				plate:              msg.plate,
+				observationsByRoad: map[uint16][]Observation{},
+				ticketsByDay:       map[uint32]*msgOutTicket{},
+			}
 			m.cars[msg.plate] = car
 		}
 		// observe the car's position and check for tickets

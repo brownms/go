@@ -102,7 +102,7 @@ func buildTestRequestBytes(t *testing.T, requestMessages []testData) []byte {
 			t.FailNow()
 		}
 		request.Write(msgBytes)
-		fmt.Printf("wrote message [%v of %v] [%+v] => bytes[%+x]\n", i+1, len(requestMessages), msg, msgBytes)
+		// fmt.Printf("wrote message [%v of %v] [%+v] => bytes[%+x]\n", i+1, len(requestMessages), msg, msgBytes)
 	}
 	b := request.Bytes()
 	if len(b) == 0 {
@@ -122,7 +122,7 @@ func TestSpeedMessageParsing(t *testing.T) {
 	}
 
 	requestBytes := buildTestRequestBytes(t, requestMessages)
-	fmt.Printf("wrote %v messages to request with %v total bytes =>[%x]\n", len(requestMessages), len(requestBytes), requestBytes)
+	// fmt.Printf("wrote %v messages to request with %v total bytes =>[%x]\n", len(requestMessages), len(requestBytes), requestBytes)
 
 	monitor := &testMonitor{}
 	conn := NewTestConnectionFromBytes(requestBytes)
@@ -140,12 +140,12 @@ func TestSpeedMessageParsing(t *testing.T) {
 	for i, testData := range requestMessages {
 		actual := monitor.messages[i]
 		expected := testData.message
-		fmt.Printf("comparing actual: [%+v] to expected: [%+v]\n", actual, expected)
+		// fmt.Printf("comparing actual: [%+v] to expected: [%+v]\n", actual, expected)
 		if !reflect.DeepEqual(expected, actual) {
 			t.Errorf("message [%v] mismatch. expected: [%+v]; actual: [%+v]", i, expected, actual)
 			t.FailNow()
 		}
-		fmt.Printf("correctly read message => [%+v]\n", actual)
+		// fmt.Printf("correctly read message => [%+v]\n", actual)
 	}
 
 	if !monitor.stopped {
@@ -191,39 +191,21 @@ func TestSpeedComputation(t *testing.T) {
 			t.FailNow()
 		}
 	}
-
 }
 
-// func TestHeartbeat(t *testing.T) {
-// 	monitor := testMonitor{}
-
-// 	requestMessages := []testData{}
-// 	requestMessages = append(requestMessages, testData{
-// 		mType: msgType_iWantHeartbeat,
-// 		message: msgInWantHeartbeat{
-// 			mType:    msgType_iWantHeartbeat,
-// 			interval: uint32(10), // every 1 seconds
-// 		},
-// 	})
-// 	requestBytes := buildTestRequestBytes(t, requestMessages)
-
-// 	conn := NewTestConnectionFromBytes(requestBytes)
-// 	_, err := monitorConnection(conn, &monitor)
-// 	if err != nil {
-// 		t.Errorf("handler error (msg %v of %v): => %v", monitor.size()+1, len(requestMessages), err.Error())
-// 		t.FailNow()
-// 	}
-// 	time.Sleep(10 * time.Second)
-// 	if monitor.size() < 5 {
-// 		t.Errorf("message parsing failed; saw %v messages but expected at least %v", monitor.size(), 5)
-// 		t.FailNow()
-// 	}
-
-// 	fmt.Printf("received [%v] messages", monitor.size())
-// 	if !monitor.stopped {
-// 		t.Errorf("failed to stop monitor for connection")
-// 		t.FailNow()
-// 	}
-
-// 	fmt.Printf("all %v messages correctly parsed\n", len(requestMessages))
-// }
+func TestDayNumber(t *testing.T) {
+	tests := []struct {
+		timestamp uint32
+		day       uint32
+	}{
+		{timestamp: 4106615, day: 47},
+	}
+	for _, test := range tests {
+		ticket := &msgOutTicket{timestamp2: test.timestamp}
+		actual := dayNumber(ticket)
+		if actual != test.day {
+			t.Errorf("incorrect day calculated: [%v]; expected => [%v]", actual, test.day)
+			t.FailNow()
+		}
+	}
+}
