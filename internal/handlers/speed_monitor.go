@@ -152,14 +152,15 @@ func (c *Car) observe(road uint16, mile uint16, timestamp uint32) {
 	}
 	observations = append(observations, Observation{mile: mile, timestamp: timestamp})
 	// sort by mile (position)
-	sort.Slice(observations, func(i, j int) bool { return observations[i].mile < observations[j].mile })
+	sort.Slice(observations, func(i, j int) bool { return observations[i].timestamp < observations[j].timestamp })
 	c.observationsByRoad[road] = observations // necessary ?
 }
 
 func (c *Car) trackTicket(ticket *msgOutTicket) {
-	day := dayNumber(ticket)
-	util.Log.Debug("plate: [%v] => ticketed on day: [%v] => [%+v]", ticket.plate, day, ticket)
-	c.ticketsByDay[day] = ticket
+	day1, day2 := days(ticket)
+	// util.Log.Debug("plate: [%v] => ticketed on days: [%v] => [%+v]", ticket.plate, day, ticket)
+	c.ticketsByDay[day1] = ticket
+	c.ticketsByDay[day2] = ticket
 }
 
 func (c *Car) wasTicketedOn(day uint32) bool {
@@ -184,8 +185,8 @@ const (
 	daySeconds  = 86400
 )
 
-func dayNumber(ticket *msgOutTicket) uint32 {
-	return ticket.timestamp2 / 86400
+func days(ticket *msgOutTicket) (uint32, uint32) {
+	return ticket.timestamp1 / 86400, ticket.timestamp2 / 86400
 }
 
 func computeSpeedMph(obs1 Observation, obs2 Observation) float64 {
@@ -200,10 +201,14 @@ func computeSpeedMph(obs1 Observation, obs2 Observation) float64 {
 func (m *SpeedMonitor) findDispatcher(road uint16) *Client {
 	dispatchers, ok := m.dispatchersByRoad[road]
 	if !ok {
+		util.Log.Debug("no dispatchers available for road: [%v]", road)
 		return nil
 	}
 	// pick a random dispatcher
-	return dispatchers[rand.Intn(len(dispatchers))]
+	dispIndex := rand.Intn(len(dispatchers))
+	dispatcher := dispatchers[dispIndex]
+	util.Log.Debug("dispatcher found for road: [%v]; using index [%v] of %v (dispatcher client: %v)", road, dispIndex, len(dispatchers), dispatcher.id)
+	return dispatcher
 }
 
 func (m *SpeedMonitor) sendPendingTickets() error {
@@ -218,18 +223,21 @@ func (m *SpeedMonitor) sendPendingTickets() error {
 			if !ok {
 				return fmt.Errorf("[client:%v] refusing to send ticket to plate [%v] with untracked car => [%+v]", dispatcher.id, ticket.plate, ticket)
 			}
-			day := dayNumber(&ticket)
-			if car.wasTicketedOn(day) {
-				util.Log.Info("[client:%v] plate [%v]; already ticketed for day [%v] => [%+v]", dispatcher.id, ticket.plate, day, ticket)
+			day1, day2 := days(&ticket)
+			util.Log.Debug("[client:%v] saw unsent ticket for plate: [%v] on day: [%v:%v] => [%+v]", dispatcher.id, car.plate, day1, day2, ticket)
+			if car.wasTicketedOn(day1) || car.wasTicketedOn(day2) {
+				util.Log.Info("[client:%v] plate [%v]; already ticketed for day [%v:%v] => [%+v]", dispatcher.id, ticket.plate, day1, day2, ticket)
 				return nil
 			}
-			util.Log.Info("[client:%v] sending ticket for plate: [%v] on day: [%v] => [%+v]", dispatcher.id, car.plate, day, ticket)
+			util.Log.Info("[client:%v] sending ticket for plate: [%v] on day: [%v:%v] => [%+v]", dispatcher.id, car.plate, day1, day2, ticket)
 			err := dispatcher.send(ticket)
 			if err != nil {
 				return fmt.Errorf("[client:%v] sending ticket: [%+v] => %w", dispatcher.id, ticket, err)
 			}
 			car.trackTicket(&ticket)
 			m.ticketsState[ticket] = true
+		} else {
+			util.Log.Warn("unable to find dispatcher for road: [%v]; not sending ticket: [%+v]", ticket.road, ticket)
 		}
 	}
 	return nil
@@ -254,7 +262,7 @@ func (m *SpeedMonitor) checkForTickets(car Car, road uint16) error {
 		}
 		speedMph := computeSpeedMph(obs1, obs2)
 		exceedsLimit := speedMph > float64(limit)
-		util.Log.Debug("plate [%v] was going [%vmph] on road: [%v] with limit [%v]; exceeds: [%v]", car.plate, speedMph, road, limit, exceedsLimit)
+		util.Log.Debug("plate [%v] was going [%vmph] on: [%v:%v=>%v] with limit [%v]; exceeds: [%v]", car.plate, speedMph, road, obs1.mile, obs2.mile, limit, exceedsLimit)
 		if exceedsLimit {
 			// generate ticket
 			ticket := msgOutTicket{
@@ -269,7 +277,10 @@ func (m *SpeedMonitor) checkForTickets(car Car, road uint16) error {
 			}
 			_, ok := m.ticketsState[ticket]
 			if !ok {
+				util.Log.Debug("ticket added to send queue: %+v", ticket)
 				m.ticketsState[ticket] = false
+			} else {
+				util.Log.Debug("ticket already in send queue: %+v", ticket)
 			}
 		}
 	}
@@ -280,6 +291,9 @@ func (m *SpeedMonitor) stop(client *Client) {
 	util.Log.Trace("[client:%v] stopping", client.id)
 	client.shutdown()
 	delete(m.clients, client.id)
+	// if client.isDispatcher() {
+	// 	client.dispatcher.roads
+	// }
 	util.Log.Info("[client:%v] stopped; sent %v bytes", client.id, client.bytesSent)
 }
 
