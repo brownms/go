@@ -14,12 +14,11 @@ type MessageHandler interface {
 }
 
 var monitorState = &SpeedMonitor{
-	cars:              make(map[string]Car),
-	limits:            make(map[uint16]uint16),
-	clients:           make(map[uint16]*Client),
-	dispatchersByRoad: make(map[uint16][]*Client),
-	ticketsState:      make(map[msgOutTicket]bool),
-	stateMutex:        sync.Mutex{},
+	cars:         make(map[string]Car),
+	limits:       make(map[uint16]uint16),
+	clients:      make(map[uint16]*Client),
+	ticketsState: make(map[msgOutTicket]bool),
+	stateMutex:   sync.Mutex{},
 }
 
 func SpeedDaemonHandler(conn io.ReadWriteCloser) (int64, error) {

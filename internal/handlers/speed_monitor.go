@@ -129,7 +129,7 @@ func (c *Client) shutdown() {
 }
 
 type Dispatcher struct {
-	// track all roads with an O(1) lookup
+	// track all roads managed by this dispatcher with an O(1) lookup
 	roads map[uint16]bool
 }
 
@@ -177,12 +177,11 @@ func (c *Car) wasTicketedOn(day uint32) bool {
 }
 
 type SpeedMonitor struct {
-	cars              map[string]Car
-	limits            map[uint16]uint16
-	clients           map[uint16]*Client
-	dispatchersByRoad map[uint16][]*Client
-	ticketsState      map[msgOutTicket]bool
-	stateMutex        sync.Mutex
+	cars         map[string]Car
+	limits       map[uint16]uint16
+	clients      map[uint16]*Client
+	ticketsState map[msgOutTicket]bool
+	stateMutex   sync.Mutex
 }
 
 const (
@@ -204,14 +203,21 @@ func computeSpeedMph(obs1 Observation, obs2 Observation) float64 {
 }
 
 func (m *SpeedMonitor) findDispatcher(road uint16) *Client {
-	dispatchers, ok := m.dispatchersByRoad[road]
-	if !ok {
+	dispatchers := []uint16{}
+	for _, client := range m.clients {
+		if client.isDispatcher() && client.dispatcher.roads[road] == true {
+			dispatchers = append(dispatchers, client.id)
+		}
+	}
+
+	if len(dispatchers) == 0 {
 		util.Log.Debug("no dispatchers available for road: [%v]", road)
 		return nil
 	}
 	// pick a random dispatcher
 	dispIndex := rand.Intn(len(dispatchers))
-	dispatcher := dispatchers[dispIndex]
+	dispatcherClientId := dispatchers[dispIndex]
+	dispatcher := m.clients[dispatcherClientId]
 	util.Log.Debug("dispatcher found for road: [%v]; using index [%v] of %v (dispatcher client: %v)", road, dispIndex, len(dispatchers), dispatcher.id)
 	return dispatcher
 }
@@ -309,6 +315,9 @@ func (m *SpeedMonitor) accept(client *Client, rawMessage interface{}) error {
 	m.stateMutex.Lock()
 	defer m.stateMutex.Unlock()
 
+	// track the client
+	m.clients[client.id] = client
+
 	util.Log.Debug("[client:%v] accepting message [%T]: %+v", client.id, rawMessage, rawMessage)
 	switch msg := rawMessage.(type) {
 	case msgInAmCamera:
@@ -332,11 +341,8 @@ func (m *SpeedMonitor) accept(client *Client, rawMessage interface{}) error {
 		for _, road := range msg.roads {
 			// add all roads
 			client.dispatcher.roads[road] = true
-			// track dispatchers for road
-			if _, ok := m.dispatchersByRoad[road]; !ok {
-				m.dispatchersByRoad[road] = []*Client{}
-			}
-			m.dispatchersByRoad[road] = append(m.dispatchersByRoad[road], client)
+			// check cars observed on roads; handles scenario where dispatcher
+			// arrives and pending tickets exist for one their roads
 			for _, car := range m.cars {
 				_, ok := car.observationsByRoad[road]
 				if ok {
