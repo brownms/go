@@ -201,8 +201,8 @@ func TestDayNumber(t *testing.T) {
 		{timestamp: 4106615, day: 47},
 	}
 	for _, test := range tests {
-		ticket := &msgOutTicket{timestamp2: test.timestamp}
-		actual := dayNumber(ticket)
+		ticket := &msgOutTicket{timestamp1: test.timestamp, timestamp2: test.timestamp}
+		_, actual := days(ticket)
 		if actual != test.day {
 			t.Errorf("incorrect day calculated: [%v]; expected => [%v]", actual, test.day)
 			t.FailNow()
