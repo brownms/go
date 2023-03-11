@@ -12,12 +12,12 @@ import (
 )
 
 type Client struct {
-	id         uint16
-	conn       *io.ReadWriteCloser
-	bytesSent  int64
-	dispatcher *Dispatcher
-	camera     *Camera
-	heartbeat  *time.Ticker
+	id            uint16
+	conn          *io.ReadWriteCloser
+	bytesSent     int64
+	dispatcher    *Dispatcher
+	camera        *Camera
+	heartbeatChan chan struct{}
 }
 
 func (c *Client) isCamera() bool {
@@ -34,17 +34,21 @@ func (c *Client) isNew() bool {
 
 func (c *Client) startHeartbeat(intervalDeciSeconds uint32) error {
 	// check for existing heartbeat channel
-	if c.heartbeat != nil {
+	if c.heartbeatChan != nil {
 		return fmt.Errorf("[client:%v] received duplicate heartbeat request", c.id)
 	}
 
 	// deciseconds (10 per second; e.g. 25 = 2.5 seconds)
 	intervalDuration := time.Duration(intervalDeciSeconds*100) * time.Millisecond
 	ticker := time.NewTicker(intervalDuration)
+	stopChan := make(chan struct{})
 	sendCount := 0
 	go func() {
 		for {
 			select {
+			case <-stopChan:
+				ticker.Stop()
+				return
 			case currentTime := <-ticker.C:
 				if sendCount == 0 || sendCount%10 == 0 {
 					util.Log.Debug("[client:%v] sending heartbeat message [count: %v; sent: %v]", c.id, sendCount, currentTime)
@@ -60,7 +64,7 @@ func (c *Client) startHeartbeat(intervalDeciSeconds uint32) error {
 	}()
 
 	util.Log.Info("[client:%v] started heartbeat beckground task (interval: %v)", c.id, intervalDuration)
-	c.heartbeat = ticker
+	c.heartbeatChan = stopChan
 	return nil
 }
 
@@ -116,9 +120,10 @@ func (c *Client) disconnect() {
 
 func (c *Client) shutdown() {
 	util.Log.Trace("[client:%v] shutting down", c.id)
-	if c.heartbeat != nil {
+	if c.heartbeatChan != nil {
 		util.Log.Info("[client:%v] stopped heartbeat ticker", c.id)
-		c.heartbeat.Stop()
+		c.heartbeatChan <- struct{}{}
+		close(c.heartbeatChan)
 	}
 	util.Log.Trace("[client:%v] shutdown completed; sent %v bytes", c.id, c.bytesSent)
 }
