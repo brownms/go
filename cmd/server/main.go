@@ -172,9 +172,4 @@ func startUDP(listenAddress string, service *Service) {
 			continue
 		}
 	}
-
-	if err != nil {
-		util.Log.Error("server: Service [%v] exited with error %w", service.name, err)
-		os.Exit(1)
-	}
 }

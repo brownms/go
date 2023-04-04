@@ -46,7 +46,9 @@ func (sender *ChatSession) Send(message string) error {
 func (sender *ChatSession) Broadcast(msgType ChatMessageType, message *string) {
 	for name, receiver := range sessions {
 		if name != sender.name && receiver.state == StateJoined {
-			receiver.Send(sender.formatMessage(msgType, message))
+			if err := receiver.Send(sender.formatMessage(msgType, message)); err != nil {
+				util.Log.Info("chat: failed to send broadcast message: [%v]", err.Error())
+			}
 		}
 	}
 }
@@ -100,12 +102,16 @@ func ChatHandler(conn io.ReadWriteCloser) (int64, error) {
 			name, err := validateName(line)
 			if err != nil {
 				session.state = StateDisconnected
-				session.Send(err.Error())
+				if err := session.Send(err.Error()); err != nil {
+					util.Log.Info("chat: failed to send error message: [%v]", err.Error())
+				}
 				break
 			}
 			session.name = name
 			session.state = StateJoined
-			session.Send(session.formatMessage(MessagePresence, nil))
+			if err := session.Send(session.formatMessage(MessagePresence, nil)); err != nil {
+				util.Log.Info("chat: failed to send presence message: [%v]", err.Error())
+			}
 			session.Broadcast(MessageEntry, nil)
 			sessions[name] = &session
 

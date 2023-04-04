@@ -26,5 +26,8 @@ test_quiet:
 test:
 	go test -v ./...
 
+lint:
+	golangci-lint run
+
 scratch:
 	go run scratch.go
