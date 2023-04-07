@@ -205,7 +205,7 @@ func computeSpeedMph(obs1 Observation, obs2 Observation) float64 {
 func (m *SpeedMonitor) findDispatcher(road uint16) *Client {
 	dispatchers := []uint16{}
 	for _, client := range m.clients {
-		if client.isDispatcher() && client.dispatcher.roads[road] == true {
+		if client.isDispatcher() && client.dispatcher.roads[road] {
 			dispatchers = append(dispatchers, client.id)
 		}
 	}
@@ -302,10 +302,28 @@ func (m *SpeedMonitor) stop(client *Client) {
 	util.Log.Trace("[client:%v] stopping", client.id)
 	client.shutdown()
 	delete(m.clients, client.id)
-	// if client.isDispatcher() {
-	// 	client.dispatcher.roads
-	// }
 	util.Log.Info("[client:%v] stopped; sent %v bytes", client.id, client.bytesSent)
+
+	if len(m.clients) > 0 {
+		return
+	}
+
+	// if no clients are left connected, dump unsent tickets
+	sentCount := 0
+	unsent := []msgOutTicket{}
+	for ticket, sent := range m.ticketsState {
+		if !sent {
+			unsent = append(unsent, ticket)
+		} else {
+			sentCount++
+		}
+	}
+	util.Log.Info("all clients disconnected; tickets counts: [sent: %v; unsent: %v]", sentCount, len(unsent))
+	if len(unsent) > 0 {
+		for _, ticket := range unsent {
+			util.Log.Info("unsent ticket ==> %+v", ticket)
+		}
+	}
 }
 
 func (m *SpeedMonitor) accept(client *Client, rawMessage interface{}) error {
@@ -323,8 +341,7 @@ func (m *SpeedMonitor) accept(client *Client, rawMessage interface{}) error {
 	case msgInAmCamera:
 		if !client.isNew() {
 			// this client has already declared its type
-			util.Log.Error("[client:%v] received %T from not-new client", client.id, msg)
-			break
+			return fmt.Errorf("received IAmCamera from client with declared type")
 		}
 		// this client is a camera
 		client.camera = &Camera{road: msg.road, mile: msg.mile, limit: msg.limit}
@@ -333,8 +350,7 @@ func (m *SpeedMonitor) accept(client *Client, rawMessage interface{}) error {
 	case msgInAmDispatcher:
 		if !client.isNew() {
 			// this client has already declared its type
-			util.Log.Error("[client:%v] received %T from not-new client", client.id, msg)
-			break
+			return fmt.Errorf("received IAmDispatcher from client with declared type")
 		}
 		// this client is a dispatcher
 		client.dispatcher = &Dispatcher{roads: map[uint16]bool{}}
