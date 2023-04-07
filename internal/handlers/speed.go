@@ -134,6 +134,10 @@ func monitorConnection(conn io.ReadWriteCloser, monitor MessageHandler) (int64, 
 			strat = strategy{}
 			err = monitor.accept(client, msg)
 			if err != nil {
+				util.Log.Error("[client:%v] error => %v", err.Error())
+				// intentionally ignoring send error here; report the outer error
+				// could use a multierror here and report both
+				_ = client.send(err.Error())
 				return client.bytesSent, err
 			}
 		}
