@@ -356,6 +356,7 @@ func (m *SpeedMonitor) accept(client *Client, rawMessage interface{}) error {
 		client.dispatcher = &Dispatcher{roads: map[uint16]bool{}}
 		for _, road := range msg.roads {
 			// add all roads
+			util.Log.Debug("dispatcher connected for road: [%v]", road)
 			client.dispatcher.roads[road] = true
 			// check cars observed on roads; handles scenario where dispatcher
 			// arrives and pending tickets exist for one their roads
