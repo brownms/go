@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"proto-challenge/internal/util"
 	"strings"
 	"testing"
 )
@@ -35,7 +36,7 @@ func TestPrime(t *testing.T) {
 
 	for _, spec := range specs {
 		request_all_text := strings.Join(spec.requests, "\n")
-		conn := NewTestConnectionFromString(request_all_text)
+		conn := util.NewTestConnectionFromString(request_all_text)
 		_, err := PrimeHandler(conn)
 
 		if err != nil {
@@ -48,13 +49,14 @@ func TestPrime(t *testing.T) {
 			t.Fail()
 		}
 
-		if len(conn.results) != len(spec.requests) {
-			t.Errorf("handler: expected %d results, actual: %d", len(spec.requests), len(conn.results))
+		results := conn.Results()
+		if len(results) != len(spec.requests) {
+			t.Errorf("handler: expected %d results, actual: %d", len(spec.requests), len(results))
 			t.FailNow()
 		}
 
 		for i, expected := range spec.results {
-			actual := strings.Trim(string(conn.results[i]), "\n")
+			actual := strings.Trim(string(results[i]), "\n")
 			if !strings.EqualFold(actual, expected) {
 				t.Errorf("handler: result mismatch:\nactual:   [%v]\nexpected: [%v]", actual, expected)
 				t.FailNow()

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"math/rand"
+	"proto-challenge/internal/util"
 	"reflect"
 	"testing"
 	"time"
@@ -125,7 +126,7 @@ func TestSpeedMessageParsing(t *testing.T) {
 	// fmt.Printf("wrote %v messages to request with %v total bytes =>[%x]\n", len(requestMessages), len(requestBytes), requestBytes)
 
 	monitor := &testMonitor{}
-	conn := NewTestConnectionFromBytes(requestBytes)
+	conn := util.NewTestConnectionFromBytes(requestBytes)
 	_, err := monitorConnection(conn, monitor)
 	if err != nil {
 		t.Errorf("handler error (msg %v of %v): => %v", monitor.size()+1, len(requestMessages), err.Error())
