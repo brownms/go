@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"encoding/binary"
+	"proto-challenge/internal/util"
 	"testing"
 )
 
@@ -52,7 +53,7 @@ func TestMeans(t *testing.T) {
 	for _, b := range requests {
 		request_all_bytes = append(request_all_bytes, b...)
 	}
-	conn := NewTestConnectionFromBytes(request_all_bytes)
+	conn := util.NewTestConnectionFromBytes(request_all_bytes)
 	_, err := MeansHandler(conn)
 
 	if err != nil {
@@ -68,14 +69,15 @@ func TestMeans(t *testing.T) {
 		101, 1499, 2000000000, 600000630,
 	}
 
-	if len(conn.results) != len(expected_results) {
-		t.Errorf("handler: expected %d results, saw: %d", len(expected_results), len(conn.results))
+	results := conn.Results()
+	if len(results) != len(expected_results) {
+		t.Errorf("handler: expected %d results, saw: %d", len(expected_results), len(results))
 		t.FailNow()
 	}
 
 	for i, expected := range expected_results {
 		var response MeansTestResponse
-		err := binary.Read(bytes.NewReader(conn.results[i]), binary.BigEndian, &response)
+		err := binary.Read(bytes.NewReader(results[i]), binary.BigEndian, &response)
 		if err != nil {
 			t.Errorf("handler: caugh error %v", err.Error())
 			t.FailNow()

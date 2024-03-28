@@ -6,7 +6,12 @@ import (
 	"io"
 	"net"
 	"os"
-	handlers "proto-challenge/internal/handlers"
+	echo "proto-challenge/internal/0_echo"
+	prime "proto-challenge/internal/1_prime"
+	means "proto-challenge/internal/2_means"
+	chat "proto-challenge/internal/3_budget_chat"
+	udp "proto-challenge/internal/4_udp"
+	speed "proto-challenge/internal/6_speed"
 	"proto-challenge/internal/util"
 	"time"
 )
@@ -33,37 +38,37 @@ func main() {
 		"echo": {
 			name:      "echo",
 			protocol:  PROTOCOL_TCP,
-			handleTcp: handlers.EchoHandler,
+			handleTcp: echo.EchoHandler,
 		},
 		"prime": {
 			name:      "prime",
 			protocol:  PROTOCOL_TCP,
-			handleTcp: handlers.PrimeHandler,
+			handleTcp: prime.PrimeHandler,
 		},
 		"means": {
 			name:      "means",
 			protocol:  PROTOCOL_TCP,
-			handleTcp: handlers.MeansHandler,
+			handleTcp: means.MeansHandler,
 		},
 		"chat": {
 			name:      "chat",
 			protocol:  PROTOCOL_TCP,
-			handleTcp: handlers.ChatHandler,
+			handleTcp: chat.ChatHandler,
 		},
 		"udp_kv": {
 			name:      "udp_kv",
 			protocol:  PROTOCOL_UDP,
-			handleUdp: handlers.KeyValueUdpHandler,
+			handleUdp: udp.KeyValueUdpHandler,
 		},
 		"mob": {
 			name:      "mob",
 			protocol:  PROTOCOL_TCP,
-			handleTcp: handlers.ChatMobProxyHandler,
+			handleTcp: chat.ChatMobProxyHandler,
 		},
 		"speed": {
 			name:      "speed",
 			protocol:  PROTOCOL_TCP,
-			handleTcp: handlers.SpeedDaemonHandler,
+			handleTcp: speed.SpeedDaemonHandler,
 		},
 	}
 
