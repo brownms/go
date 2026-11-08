@@ -1,0 +1,67 @@
+package primetime
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/brownms/go/protohackers/internal/conntest"
+)
+
+type primeSpec struct {
+	requests []string
+	results  []string
+}
+
+func primeSpecFrom(in string, out string) primeSpec {
+	return primeSpec{
+		requests: []string{in},
+		results:  []string{out},
+	}
+}
+
+func TestPrime(t *testing.T) {
+	specs := []primeSpec{
+		primeSpecFrom(`{ "method": "isPrime", "number": 7 }`, `{"method":"isPrime","prime":true}`),
+		primeSpecFrom(`{ "method": "isPrime", "number": 32 }`, `{"method":"isPrime","prime":false}`),
+		primeSpecFrom("not json", "Invalid JSON"),
+		primeSpecFrom("   ", "Invalid Request"),
+		{
+			requests: []string{
+				`{ "method": "isPrime", "number": 7 }`, `{ "method": "isPrime", "number": 14 }`, `{ "method": "foo", "number": 14 }`,
+			},
+			results: []string{
+				`{"method":"isPrime","prime":true}`, `{"method":"isPrime","prime":false}`, "Invalid Method: [foo]",
+			},
+		},
+	}
+
+	for _, spec := range specs {
+		request_all_text := strings.Join(spec.requests, "\n")
+		conn := conntest.NewFromString(request_all_text)
+		_, err := Handler(conn)
+
+		if err != nil {
+			t.Errorf("Handler returned error %v", err.Error())
+			t.FailNow()
+		}
+
+		if !conn.IsClosed() {
+			t.Errorf("handler: Connection was not properly closed")
+			t.Fail()
+		}
+
+		results := conn.Results()
+		if len(results) != len(spec.requests) {
+			t.Errorf("handler: expected %d results, actual: %d", len(spec.requests), len(results))
+			t.FailNow()
+		}
+
+		for i, expected := range spec.results {
+			actual := strings.Trim(string(results[i]), "\n")
+			if !strings.EqualFold(actual, expected) {
+				t.Errorf("handler: result mismatch:\nactual:   [%v]\nexpected: [%v]", actual, expected)
+				t.FailNow()
+			}
+		}
+	}
+}
