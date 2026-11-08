@@ -48,10 +48,10 @@ func Handler(conn io.ReadWriteCloser) (int64, error) {
 	return int64(total_bytes_written), nil
 }
 
-func handleRequest(request_line string) string {
-	slog.Debug("raw input", "line", string(request_line))
+func handleRequest(requestLine string) string {
+	slog.Debug("raw input", "line", requestLine)
 	request := PrimeRequest{}
-	err := json.Unmarshal([]byte(request_line), &request)
+	err := json.Unmarshal([]byte(requestLine), &request)
 	if err != nil {
 		// failed to parse JSON
 		slog.Info("failed to parse JSON", "err", err)

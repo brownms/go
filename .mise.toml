@@ -1,3 +1,42 @@
 [tools]
 go = "1.27.3"
 golangci-lint = "2.15.0"
+
+[tasks.build]
+description = "Build every command into out/"
+run = "go build -o out/ ./..."
+
+[tasks."build:linux"]
+description = "Cross-compile every command for linux/amd64 into out/linux_amd64/"
+env = { GOOS = "linux", GOARCH = "amd64" }
+run = "go build -o out/linux_amd64/ ./..."
+
+[tasks.test]
+description = "Run all tests with the race detector"
+run = "go test -race ./..."
+
+[tasks.lint]
+description = "Run golangci-lint (linters and formatter checks)"
+run = "golangci-lint run"
+
+[tasks.fmt]
+description = "Format code with gofmt and goimports"
+run = "golangci-lint fmt"
+
+[tasks.ci]
+description = "Everything CI runs"
+depends = ["lint", "test"]
+
+[tasks.run]
+description = "Run a protohackers server, e.g. mise run run speeddaemon -- -log=debug"
+usage = '''
+arg "<service>" help="Command name under protohackers/cmd"
+arg "[args]..." help="Flags passed to the server" var=#true
+'''
+run = 'eval go run "./protohackers/cmd/${usage_service}" "${usage_args:-}"'
+
+[tasks.publish]
+description = "Copy one linux/amd64 server binary to host yoda"
+depends = ["build:linux"]
+usage = 'arg "<service>" help="Command name under protohackers/cmd"'
+run = 'scp out/linux_amd64/${usage_service} yoda:'

@@ -14,5 +14,6 @@ Each problem is its own server under `cmd/`; the implementations live in `intern
 | 6 | Speed Daemon | `speeddaemon` |
 
 ```sh
-go run ./protohackers/cmd/speeddaemon -port=9999 -log=debug
+mise run run speeddaemon -- -port=9999 -log=debug   # or: go run ./protohackers/cmd/speeddaemon -port=9999 -log=debug
+mise run publish speeddaemon                        # cross-compile for linux/amd64 and scp to yoda
 ```

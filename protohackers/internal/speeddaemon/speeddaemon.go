@@ -96,7 +96,7 @@ func monitorConnection(conn io.ReadWriteCloser, monitor MessageHandler) (int64, 
 		} else {
 			// variable-length (length-prefixed) field
 			if fieldLen == 0 {
-				fieldLen = int(uint8(nextByte))
+				fieldLen = int(nextByte)
 				if fieldType == arr_u16 {
 					// 2 bytes per u16 array element
 					fieldLen = fieldLen * 2
