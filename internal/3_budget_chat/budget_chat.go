@@ -136,10 +136,10 @@ func ChatHandler(conn io.ReadWriteCloser) (int64, error) {
 
 func validateName(name string) (string, error) {
 	if len(name) == 0 {
-		return name, errors.New("Name cannot be empty")
+		return name, errors.New("name cannot be empty")
 	}
 	if len(name) > 20 {
-		return name, errors.New("Name cannot have more than 20 characters")
+		return name, errors.New("name cannot have more than 20 characters")
 	}
 	match, err := regexp.Match(NameRegexp, []byte(name))
 	if err != nil {

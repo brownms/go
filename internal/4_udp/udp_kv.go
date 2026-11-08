@@ -41,11 +41,11 @@ func (kv *KeyValueStore) accept(id int64, request string, writer io.Writer) erro
 		// RETRIEVE request (contains key only)
 		// response =
 		// util.Log.Debug("udp_kv: [%v] Writing [%v] to UDP connection", id, response)
-		bytes_sent, err := writer.Write([]byte(fmt.Sprintf("%v=%v", key, kv.Retrieve(key))))
+		bytesSent, err := fmt.Fprintf(writer, "%v=%v", key, kv.Retrieve(key))
 		if err != nil {
 			return fmt.Errorf("udp_kv: [%v] Write failed => %w", id, err)
 		}
-		util.Log.Info("udp_kv: [%v] Completed RETRIEVE=>key:[%v] Sent %v bytes (in %v)", id, key, bytes_sent, time.Since(started))
+		util.Log.Info("udp_kv: [%v] Completed RETRIEVE=>key:[%v] Sent %v bytes (in %v)", id, key, bytesSent, time.Since(started))
 		// util.Log.Trace("udp_kv: [%v] UDP handler completed: Sent response: [%v]", id, response)
 	}
 	return nil

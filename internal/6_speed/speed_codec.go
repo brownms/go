@@ -108,7 +108,7 @@ type strategy struct {
 	typeIndicator speedMsgType
 	fieldTypes    []fieldType
 	name          string
-	parse         func([][]byte) (interface{}, error)
+	parse         func([][]byte) (any, error)
 	serialize     func(any) ([]byte, error)
 }
 
@@ -117,7 +117,7 @@ var strategies = map[speedMsgType]strategy{
 		typeIndicator: msgType_iAmCamera,
 		fieldTypes:    []fieldType{u16, u16, u16},
 		name:          "IAmCamera",
-		parse: func(msgBytes [][]byte) (interface{}, error) {
+		parse: func(msgBytes [][]byte) (any, error) {
 			if len(msgBytes) != 3 {
 				return nil, fmt.Errorf("invalid number of fields: %v (expected %v)", len(msgBytes), 3)
 			}
@@ -153,7 +153,7 @@ var strategies = map[speedMsgType]strategy{
 		typeIndicator: msgType_iAmDispatcher,
 		fieldTypes:    []fieldType{arr_u16},
 		name:          "IAmDispatcher",
-		parse: func(msgBytes [][]byte) (interface{}, error) {
+		parse: func(msgBytes [][]byte) (any, error) {
 			if len(msgBytes) != 1 {
 				return nil, fmt.Errorf("invalid number of fields: %v (expected %v)", len(msgBytes), 1)
 			}
@@ -194,7 +194,7 @@ var strategies = map[speedMsgType]strategy{
 		typeIndicator: msgType_iPlate,
 		fieldTypes:    []fieldType{str, u32},
 		name:          "Plate",
-		parse: func(msgBytes [][]byte) (interface{}, error) {
+		parse: func(msgBytes [][]byte) (any, error) {
 			if len(msgBytes) != 2 {
 				return nil, fmt.Errorf("invalid number of fields: %v (expected %v)", len(msgBytes), 2)
 			}
@@ -226,7 +226,7 @@ var strategies = map[speedMsgType]strategy{
 		typeIndicator: msgType_iWantHeartbeat,
 		fieldTypes:    []fieldType{u32},
 		name:          "WantHeartBeat",
-		parse: func(msgBytes [][]byte) (interface{}, error) {
+		parse: func(msgBytes [][]byte) (any, error) {
 			if len(msgBytes) != 1 {
 				return nil, fmt.Errorf("invalid number of fields: %v (expected %v)", len(msgBytes), 1)
 			}
@@ -255,7 +255,7 @@ var strategies = map[speedMsgType]strategy{
 		typeIndicator: msgType_oError,
 		fieldTypes:    []fieldType{str},
 		name:          "Error",
-		parse: func(msgBytes [][]byte) (interface{}, error) {
+		parse: func(msgBytes [][]byte) (any, error) {
 			if len(msgBytes) != 1 {
 				return nil, fmt.Errorf("invalid number of fields: %v (expected %v)", len(msgBytes), 1)
 			}
@@ -284,7 +284,7 @@ var strategies = map[speedMsgType]strategy{
 		typeIndicator: msgType_oHeartbeat,
 		fieldTypes:    []fieldType{},
 		name:          "HeartBeat",
-		parse: func(msgBytes [][]byte) (interface{}, error) {
+		parse: func(msgBytes [][]byte) (any, error) {
 			if len(msgBytes) != 0 {
 				return nil, fmt.Errorf("invalid number of fields: %v (expected %v)", len(msgBytes), 0)
 			}
@@ -307,7 +307,7 @@ var strategies = map[speedMsgType]strategy{
 		typeIndicator: msgType_oTicket,
 		fieldTypes:    []fieldType{str, u16, u16, u32, u16, u32, u16},
 		name:          "Ticket",
-		parse: func(msgBytes [][]byte) (interface{}, error) {
+		parse: func(msgBytes [][]byte) (any, error) {
 			if len(msgBytes) != 7 {
 				return nil, fmt.Errorf("invalid number of fields: %v (expected %v)", len(msgBytes), 7)
 			}

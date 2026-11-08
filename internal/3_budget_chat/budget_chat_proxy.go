@@ -31,8 +31,8 @@ var bogusCoinRegexp = regexp.MustCompile("^7([a-zA-Z0-9]{24,34})")
 // todo: not the best replacement. could be done with a more complete regex but i'm lazy
 func rewrite(message string) string {
 	result := message
-	tokens := strings.Split(message, " ")
-	for _, token := range tokens {
+	tokens := strings.SplitSeq(message, " ")
+	for token := range tokens {
 		s := len(token)
 		if s >= 26 && s <= 35 && bogusCoinRegexp.Match([]byte(token)) {
 			result = strings.Replace(result, token, MaliciousToken, 1)

@@ -7,14 +7,13 @@ import (
 	"proto-challenge/internal/util"
 	"reflect"
 	"testing"
-	"time"
 )
 
 const (
 	TestScale = 100000
 )
 
-func randMsg() (speedMsgType, interface{}) {
+func randMsg() (speedMsgType, any) {
 	types := []speedMsgType{msgType_iAmCamera, msgType_iAmDispatcher, msgType_iPlate, msgType_iWantHeartbeat, msgType_oHeartbeat, msgType_oTicket}
 	mType := types[rand.Intn(len(types))]
 	switch mType {
@@ -72,15 +71,15 @@ func randMsg() (speedMsgType, interface{}) {
 
 type testData struct {
 	mType   speedMsgType
-	message interface{}
+	message any
 }
 
 type testMonitor struct {
-	messages []interface{}
+	messages []any
 	stopped  bool
 }
 
-func (m *testMonitor) accept(client *Client, rawMessage interface{}) error {
+func (m *testMonitor) accept(client *Client, rawMessage any) error {
 	m.messages = append(m.messages, rawMessage)
 	return nil
 }
@@ -114,7 +113,6 @@ func buildTestRequestBytes(t *testing.T, requestMessages []testData) []byte {
 
 func TestSpeedMessageParsing(t *testing.T) {
 	// util.Log.SetLevel("trace")
-	rand.Seed(time.Now().UnixMilli())
 
 	requestMessages := []testData{}
 	for i := 1; i <= TestScale; i++ {
