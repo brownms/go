@@ -1,24 +1,20 @@
-.PHONY: all echo clean
+.PHONY: all clean server publish run test test_quiet lint scratch
 
-SERVICE?=echo
+SERVICE?=smoketest
 
 all: server
-clean: out
+clean:
 	rm -rf out
 
-server: cmd/server/*.go internal/*/*.go test_quiet
-	[ -d out ] || mkdir out
-	go build -o out/proto_darwin ./cmd/server/*.go
-	# GOOS=linux GOARCH=arm64 go build -o out/proto_linux_arm64 ./cmd/server/*.go
-	GOOS=linux GOARCH=amd64 go build -o out/proto_linux_x64 ./cmd/server/*.go
+server: test_quiet
+	go build -o out/ ./protohackers/cmd/...
+	GOOS=linux GOARCH=amd64 go build -o out/linux_amd64/ ./protohackers/cmd/...
 
 publish: server
-	# ssh aws-proto "pkill -f server_linux_arm64"
-	# scp out/server_linux_arm64 aws-proto:
-	scp out/proto_linux_x64 yoda:
+	scp out/linux_amd64/$(SERVICE) yoda:
 
 run:
-	go run -v ./cmd/server/main.go -service=${SERVICE}
+	go run ./protohackers/cmd/$(SERVICE)
 
 test_quiet:
 	go test ./...
@@ -30,4 +26,4 @@ lint:
 	golangci-lint run
 
 scratch:
-	go run scratch.go
+	go run ./scratch
