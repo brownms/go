@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/brownms/go/protohackers/internal/server"
 	"github.com/brownms/go/protohackers/internal/speeddaemon"
@@ -10,7 +13,10 @@ import (
 
 func main() {
 	addr := server.ParseFlags()
-	if err := server.ServeTCP(addr, "speeddaemon", speeddaemon.Handler); err != nil {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	if err := server.ServeTCP(ctx, addr, "speeddaemon", speeddaemon.NewMonitor().Handle); err != nil {
 		slog.Error("server failed", "err", err)
 		os.Exit(1)
 	}

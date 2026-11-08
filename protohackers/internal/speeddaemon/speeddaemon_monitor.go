@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"log/slog"
@@ -14,11 +15,12 @@ import (
 
 type Client struct {
 	id            uint16
-	conn          *io.ReadWriteCloser
-	bytesSent     int64
+	conn          io.ReadWriteCloser
+	bytesSent     atomic.Int64
 	dispatcher    *Dispatcher
 	camera        *Camera
-	heartbeatChan chan struct{}
+	heartbeatStop chan struct{}
+	shutdownOnce  sync.Once
 }
 
 func (c *Client) isCamera() bool {
@@ -33,39 +35,36 @@ func (c *Client) isNew() bool {
 	return !c.isCamera() && !c.isDispatcher()
 }
 
+// startHeartbeat sends heartbeats until shutdown, or until a send fails, which disconnects the client.
 func (c *Client) startHeartbeat(intervalDeciSeconds uint32) error {
-	// check for existing heartbeat channel
-	if c.heartbeatChan != nil {
+	if c.heartbeatStop != nil {
 		return fmt.Errorf("[client:%v] received duplicate heartbeat request", c.id)
 	}
 
-	// deciseconds (10 per second; e.g. 25 = 2.5 seconds)
-	intervalDuration := time.Duration(intervalDeciSeconds*100) * time.Millisecond
-	ticker := time.NewTicker(intervalDuration)
-	stopChan := make(chan struct{})
-	sendCount := 0
+	interval := time.Duration(intervalDeciSeconds) * 100 * time.Millisecond
+	stop := make(chan struct{})
+	c.heartbeatStop = stop
 	go func() {
-		for {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for sendCount := 0; ; sendCount++ {
 			select {
-			case <-stopChan:
-				ticker.Stop()
+			case <-stop:
 				return
-			case currentTime := <-ticker.C:
-				if sendCount == 0 || sendCount%10 == 0 {
-					slog.Debug("sending heartbeat", "client", c.id, "count", sendCount, "at", currentTime)
+			case now := <-ticker.C:
+				if sendCount%10 == 0 {
+					slog.Debug("sending heartbeat", "client", c.id, "count", sendCount, "at", now)
 				}
 				if err := c.send(msgOutHeartbeat{mType: msgType_oHeartbeat}); err != nil {
-					slog.Error("failed to send heartbeat", "client", c.id, "at", currentTime, "err", err)
-					ticker.Stop()
+					slog.Error("failed to send heartbeat", "client", c.id, "at", now, "err", err)
 					c.disconnect()
+					return
 				}
-				sendCount += 1
 			}
 		}
 	}()
 
-	slog.Info("started heartbeat", "client", c.id, "interval", intervalDuration)
-	c.heartbeatChan = stopChan
+	slog.Info("started heartbeat", "client", c.id, "interval", interval)
 	return nil
 }
 
@@ -101,32 +100,29 @@ func (c *Client) send(message any) error {
 	if err != nil {
 		return fmt.Errorf("[client:%v] failed to serialize msgType: %v => %w", c.id, mType, err)
 	}
-	bytesSent, err := (*c.conn).Write(msgBytes)
+	n, err := c.conn.Write(msgBytes)
+	c.bytesSent.Add(int64(n))
 	if err != nil {
 		return fmt.Errorf("[client:%v] failed to write bytes for msgType: %v => %w", c.id, mType, err)
 	}
-	c.bytesSent += int64(bytesSent)
 	return nil
 }
 
+// disconnect closes the connection, which ends the client's read loop; the
+// monitor then stops the client.
 func (c *Client) disconnect() {
 	slog.Debug("disconnecting", "client", c.id)
-	defer c.shutdown()
-	err := (*c.conn).Close()
-	if err != nil {
-		panic(fmt.Errorf("[client:%v] failed to close connection => %w", c.id, err))
-	}
-
+	c.conn.Close()
 }
 
+// shutdown stops the client's heartbeat. It is safe to call more than once.
 func (c *Client) shutdown() {
-	slog.Debug("shutting down", "client", c.id)
-	if c.heartbeatChan != nil {
-		slog.Info("stopped heartbeat", "client", c.id)
-		c.heartbeatChan <- struct{}{}
-		close(c.heartbeatChan)
-	}
-	slog.Debug("shutdown completed", "client", c.id, "bytes_sent", c.bytesSent)
+	c.shutdownOnce.Do(func() {
+		if c.heartbeatStop != nil {
+			close(c.heartbeatStop)
+			slog.Info("stopped heartbeat", "client", c.id)
+		}
+	})
 }
 
 type Dispatcher struct {
@@ -176,12 +172,24 @@ func (c *Car) wasTicketedOn(day uint32) bool {
 	return false
 }
 
+// SpeedMonitor holds the state shared by every camera and dispatcher connection.
 type SpeedMonitor struct {
 	cars         map[string]Car
 	limits       map[uint16]uint16
 	clients      map[uint16]*Client
 	ticketsState map[msgOutTicket]bool
 	stateMutex   sync.Mutex
+	lastClientID atomic.Uint32
+}
+
+// NewMonitor returns an empty SpeedMonitor.
+func NewMonitor() *SpeedMonitor {
+	return &SpeedMonitor{
+		cars:         make(map[string]Car),
+		limits:       make(map[uint16]uint16),
+		clients:      make(map[uint16]*Client),
+		ticketsState: make(map[msgOutTicket]bool),
+	}
 }
 
 const (
@@ -299,10 +307,13 @@ func (m *SpeedMonitor) checkForTickets(car Car, road uint16) error {
 }
 
 func (m *SpeedMonitor) stop(client *Client) {
+	m.stateMutex.Lock()
+	defer m.stateMutex.Unlock()
+
 	slog.Debug("stopping", "client", client.id)
 	client.shutdown()
 	delete(m.clients, client.id)
-	slog.Info("client stopped", "client", client.id, "bytes_sent", client.bytesSent)
+	slog.Info("client stopped", "client", client.id, "bytes_sent", client.bytesSent.Load())
 
 	if len(m.clients) > 0 {
 		return
@@ -410,7 +421,7 @@ func (m *SpeedMonitor) accept(client *Client, rawMessage any) error {
 		}
 
 	default:
-		fmt.Printf("unknown message %v ", msg)
+		slog.Warn("unknown message", "client", client.id, "type", fmt.Sprintf("%T", msg))
 	}
 	return nil
 }

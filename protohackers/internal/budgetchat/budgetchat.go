@@ -5,149 +5,138 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"regexp"
-	"strings"
-
 	"log/slog"
+	"maps"
+	"regexp"
+	"slices"
+	"strings"
+	"sync"
 )
 
-type ChatState byte
-type ChatMessageType byte
+const maxNameLength = 20
 
-const (
-	StateNew          ChatState = 'N'
-	StateJoined       ChatState = 'J'
-	StateDisconnected ChatState = 'D'
+var validName = regexp.MustCompile(`^[A-Za-z0-9]+$`)
 
-	MessagePresence ChatMessageType = 'P'
-	MessageEntry    ChatMessageType = 'E'
-	MessageExit     ChatMessageType = 'X'
-	MessageSend     ChatMessageType = 'S'
-	NameRegexp      string          = `^[A-Za-z0-9]*$`
-)
-
-type ChatSession struct {
-	bytes_written int64
-	state         ChatState
-	name          string
-	conn          io.ReadWriteCloser
+// Room is a chat room shared by every connection served by Handle.
+type Room struct {
+	mu      sync.Mutex
+	members map[string]*member
 }
 
-var sessions = map[string]*ChatSession{}
+type member struct {
+	name         string
+	conn         io.Writer
+	bytesWritten int64
+}
 
-func (sender *ChatSession) Send(message string) error {
-	bytes_written, err := sender.conn.Write([]byte(message + "\n"))
-	if err != nil {
-		return fmt.Errorf("failed to send message: [%v] => %w", message, err)
+// NewRoom returns an empty Room.
+func NewRoom() *Room {
+	return &Room{members: map[string]*member{}}
+}
+
+// Handle serves one chat client: it asks for a name, joins the room, and
+// relays each line the client sends to every other member until the client disconnects.
+func (r *Room) Handle(conn io.ReadWriteCloser) (int64, error) {
+	defer conn.Close()
+
+	self := &member{conn: conn}
+	if err := self.send("Welcome to budgetchat! What shall I call you?"); err != nil {
+		return self.bytesWritten, fmt.Errorf("sending welcome message: %w", err)
 	}
-	sender.bytes_written += int64(bytes_written)
+
+	scanner := bufio.NewScanner(conn)
+	if !scanner.Scan() {
+		return self.bytesWritten, scanner.Err()
+	}
+	self.name = strings.TrimSpace(scanner.Text())
+	if err := r.join(self); err != nil {
+		if sendErr := self.send(err.Error()); sendErr != nil {
+			slog.Info("failed to send error message", "err", sendErr)
+		}
+		slog.Info("session ended before join", "user", self.name, "reason", err)
+		return self.bytesWritten, nil
+	}
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		r.broadcast(self, fmt.Sprintf("[%v] %s", self.name, line))
+	}
+	written := r.leave(self)
+
+	if err := scanner.Err(); err != nil {
+		return written, fmt.Errorf("reading connection: %w", err)
+	}
+	return written, nil
+}
+
+// join adds m to the room, or returns an error to show the client if m.name is invalid or taken.
+func (r *Room) join(m *member) error {
+	if err := validateName(m.name); err != nil {
+		return err
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if _, taken := r.members[m.name]; taken {
+		return fmt.Errorf("name already in use: %v", m.name)
+	}
+	list := strings.Join(slices.Sorted(maps.Keys(r.members)), ",")
+	if list == "" {
+		list = "<none present>"
+	}
+	if err := m.send("* The room contains: " + list); err != nil {
+		slog.Info("failed to send presence message", "err", err)
+	}
+	r.broadcastLocked(m, fmt.Sprintf("* %v has entered the room", m.name))
+	r.members[m.name] = m
 	return nil
 }
 
-func (sender *ChatSession) Broadcast(msgType ChatMessageType, message *string) {
-	for name, receiver := range sessions {
-		if name != sender.name && receiver.state == StateJoined {
-			if err := receiver.Send(sender.formatMessage(msgType, message)); err != nil {
-				slog.Info("failed to send broadcast", "err", err)
-			}
+// leave removes m from the room, tells the others, and returns the bytes written to m.
+func (r *Room) leave(m *member) int64 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	delete(r.members, m.name)
+	slog.Info("session ended; broadcasting exit", "user", m.name)
+	r.broadcastLocked(m, fmt.Sprintf("* %v has left the room", m.name))
+	return m.bytesWritten
+}
+
+func (r *Room) broadcast(sender *member, message string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.broadcastLocked(sender, message)
+}
+
+func (r *Room) broadcastLocked(sender *member, message string) {
+	for name, receiver := range r.members {
+		if name == sender.name {
+			continue
+		}
+		if err := receiver.send(message); err != nil {
+			slog.Info("failed to send broadcast", "to", name, "err", err)
 		}
 	}
 }
 
-func (sender *ChatSession) FindJoinedPeers() []string {
-	peer_names := []string{}
-	for name, receiver := range sessions {
-		if name != sender.name && receiver.state == StateJoined {
-			peer_names = append(peer_names, receiver.name)
-		}
-	}
-	return peer_names
-}
-
-func (sender *ChatSession) formatMessage(msgType ChatMessageType, message *string) string {
-	switch msgType {
-	case MessagePresence:
-		peer_names := strings.Join(sender.FindJoinedPeers(), ",")
-		if peer_names == "" {
-			peer_names = "<none present>"
-		}
-		return fmt.Sprintf("* The room contains: %v", peer_names)
-	case MessageEntry:
-		return fmt.Sprintf("* %v has entered the room", sender.name)
-	case MessageExit:
-		return fmt.Sprintf("* %v has left the room", sender.name)
-	case MessageSend:
-		return fmt.Sprintf("[%v] %s", sender.name, *message)
-	}
-	return fmt.Sprintf("unknown message type => %v", msgType)
-}
-
-func Handler(conn io.ReadWriteCloser) (int64, error) {
-	defer conn.Close()
-
-	scanner := bufio.NewScanner(conn)
-	session := ChatSession{
-		state: StateNew,
-		conn:  conn,
-	}
-
-	err := session.Send("Welcome to budgetchat! What shall I call you?")
+func (m *member) send(message string) error {
+	n, err := io.WriteString(m.conn, message+"\n")
+	m.bytesWritten += int64(n)
 	if err != nil {
-		return session.bytes_written, fmt.Errorf("chat: sending welcome message %w", err)
+		return fmt.Errorf("sending message %q: %w", message, err)
 	}
-
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if session.state == StateNew {
-			// accept new name and transition to Joined state
-			name, err := validateName(line)
-			if err != nil {
-				session.state = StateDisconnected
-				if err := session.Send(err.Error()); err != nil {
-					slog.Info("failed to send error message", "err", err)
-				}
-				break
-			}
-			session.name = name
-			session.state = StateJoined
-			if err := session.Send(session.formatMessage(MessagePresence, nil)); err != nil {
-				slog.Info("failed to send presence message", "err", err)
-			}
-			session.Broadcast(MessageEntry, nil)
-			sessions[name] = &session
-
-		} else if session.state == StateJoined {
-			// broadcast message to others
-			session.Broadcast(MessageSend, &line)
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		return 0, fmt.Errorf("chat: Error reading connection %w", err)
-	}
-	if session.state == StateJoined {
-		slog.Info("session ended; broadcasting exit", "user", session.name)
-		session.Broadcast(MessageExit, nil)
-		delete(sessions, session.name)
-	} else {
-		slog.Info("session ended before join", "user", session.name)
-	}
-	return session.bytes_written, nil
+	return nil
 }
 
-func validateName(name string) (string, error) {
-	if len(name) == 0 {
-		return name, errors.New("name cannot be empty")
+func validateName(name string) error {
+	switch {
+	case name == "":
+		return errors.New("name cannot be empty")
+	case len(name) > maxNameLength:
+		return fmt.Errorf("name cannot have more than %d characters", maxNameLength)
+	case !validName.MatchString(name):
+		return fmt.Errorf("invalid name: %v", name)
 	}
-	if len(name) > 20 {
-		return name, errors.New("name cannot have more than 20 characters")
-	}
-	match, err := regexp.Match(NameRegexp, []byte(name))
-	if err != nil {
-		return name, fmt.Errorf("failed to check name: %w", err)
-	}
-	if !match {
-		return name, fmt.Errorf("invalid name: %v", name)
-	}
-	return name, nil
+	return nil
 }

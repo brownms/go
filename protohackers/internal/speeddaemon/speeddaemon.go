@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"sync"
 
 	"log/slog"
 )
@@ -14,33 +13,15 @@ type MessageHandler interface {
 	stop(*Client)
 }
 
-var monitorState = &SpeedMonitor{
-	cars:         make(map[string]Car),
-	limits:       make(map[uint16]uint16),
-	clients:      make(map[uint16]*Client),
-	ticketsState: make(map[msgOutTicket]bool),
-	stateMutex:   sync.Mutex{},
+// Handle serves one camera or dispatcher connection.
+func (m *SpeedMonitor) Handle(conn io.ReadWriteCloser) (int64, error) {
+	return monitorConnection(conn, uint16(m.lastClientID.Add(1)), m)
 }
 
-func Handler(conn io.ReadWriteCloser) (int64, error) {
-	return monitorConnection(conn, monitorState)
-}
-
-var clientId = 0
-var clientMutex = sync.Mutex{}
-
-func nextClientId() uint16 {
-	clientMutex.Lock()
-	defer clientMutex.Unlock()
-	clientId += 1
-	return uint16(clientId)
-}
-
-func monitorConnection(conn io.ReadWriteCloser, monitor MessageHandler) (int64, error) {
-
+func monitorConnection(conn io.ReadWriteCloser, clientID uint16, monitor MessageHandler) (int64, error) {
 	client := &Client{
-		id:   nextClientId(),
-		conn: &conn,
+		id:   clientID,
+		conn: conn,
 	}
 	defer monitor.stop(client)
 
@@ -62,20 +43,20 @@ func monitorConnection(conn io.ReadWriteCloser, monitor MessageHandler) (int64, 
 			msgFields = [][]byte{}
 			s, ok := strategies[speedMsgType(nextByte)]
 			if !ok {
-				return client.bytesSent, fmt.Errorf("invalid message type indicator %x", nextByte)
+				return client.bytesSent.Load(), fmt.Errorf("invalid message type indicator %x", nextByte)
 			}
 			strat = s
 			slog.Debug("new message", "n", messageCount, "type", strat.name, "fields", len(strat.fieldTypes))
 			if len(strat.fieldTypes) == 0 {
 				msg, err := strat.parse(msgFields)
 				if err != nil {
-					return client.bytesSent, err
+					return client.bytesSent.Load(), err
 				}
 				// reset strategy to start new message
 				strat = strategy{}
 				err = monitor.accept(client, msg)
 				if err != nil {
-					return client.bytesSent, err
+					return client.bytesSent.Load(), err
 				}
 			}
 			continue
@@ -134,14 +115,14 @@ func monitorConnection(conn io.ReadWriteCloser, monitor MessageHandler) (int64, 
 				// intentionally ignoring send error here; report the outer error
 				// could use a multierror here and report both
 				_ = client.send(err.Error())
-				return client.bytesSent, err
+				return client.bytesSent.Load(), err
 			}
 		}
 	}
 
 	if scanner.Err() != nil {
-		return client.bytesSent, fmt.Errorf("scanning connection %w", scanner.Err())
+		return client.bytesSent.Load(), fmt.Errorf("scanning connection %w", scanner.Err())
 	}
 
-	return client.bytesSent, nil
+	return client.bytesSent.Load(), nil
 }
