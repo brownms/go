@@ -68,7 +68,7 @@ func (c *Client) startHeartbeat(intervalDeciSeconds uint32) error {
 	return nil
 }
 
-func (c *Client) send(message interface{}) error {
+func (c *Client) send(message any) error {
 	util.Log.Trace("[client:%v] send raw message => [%T] => [%+v]", c.id, message, message)
 	mType := msgType_None
 	switch msg := message.(type) {
@@ -326,7 +326,7 @@ func (m *SpeedMonitor) stop(client *Client) {
 	}
 }
 
-func (m *SpeedMonitor) accept(client *Client, rawMessage interface{}) error {
+func (m *SpeedMonitor) accept(client *Client, rawMessage any) error {
 	// obtain lock to ensure only one concurrent writer to state
 	// TODO => could make this more granular to speed up handling, but messages
 	// are small and inexpensive; forcing serial handling is probably fine

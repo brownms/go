@@ -9,7 +9,7 @@ import (
 )
 
 type MessageHandler interface {
-	accept(*Client, interface{}) error
+	accept(*Client, any) error
 	stop(*Client)
 }
 
