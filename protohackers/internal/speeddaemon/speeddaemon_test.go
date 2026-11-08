@@ -125,7 +125,7 @@ func TestSpeedMessageParsing(t *testing.T) {
 
 	monitor := &testMonitor{}
 	conn := conntest.NewFromBytes(requestBytes)
-	_, err := monitorConnection(conn, monitor)
+	_, err := monitorConnection(conn, 1, monitor)
 	if err != nil {
 		t.Errorf("handler error (msg %v of %v): => %v", monitor.size()+1, len(requestMessages), err.Error())
 		t.FailNow()
