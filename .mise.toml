@@ -3,13 +3,13 @@ go = "1.27.3"
 golangci-lint = "2.15.0"
 
 [tasks.build]
-description = "Build every command into out/"
-run = "go build -o out/ ./..."
-
-[tasks."build:linux"]
-description = "Cross-compile every command for linux/amd64 into out/linux_amd64/"
-env = { GOOS = "linux", GOARCH = "amd64" }
-run = "go build -o out/linux_amd64/ ./..."
+description = "Build every <project>/cmd/<command> into out/<project>/"
+run = '''
+for dir in */cmd; do
+  project=${dir%/cmd}
+  go build -o "out/$project/" "./$project/cmd/..."
+done
+'''
 
 [tasks.test]
 description = "Run all tests with the race detector"
@@ -25,18 +25,29 @@ run = "golangci-lint fmt"
 
 [tasks.ci]
 description = "Everything CI runs"
-depends = ["lint", "test"]
+depends = ["lint", "test", "build"]
 
 [tasks.run]
-description = "Run a protohackers server, e.g. mise run run speeddaemon -- -log=debug"
+description = "Run a command, e.g. mise run run protohackers/speeddaemon -- -log=debug"
 usage = '''
-arg "<service>" help="Command name under protohackers/cmd"
-arg "[args]..." help="Flags passed to the server" var=#true
+arg "<command>" help="<project>/<command>, for ./<project>/cmd/<command>"
+arg "[args]..." help="Arguments passed to the command" var=#true
 '''
-run = 'eval go run "./protohackers/cmd/${usage_service}" "${usage_args:-}"'
+run = '''
+project=${usage_command%/*}
+cmd=${usage_command##*/}
+[ -d "$project/cmd/$cmd" ] || { echo "no command at ./$project/cmd/$cmd" >&2; exit 2; }
+eval 'go run "./$project/cmd/$cmd"' "${usage_args:-}"
+'''
 
 [tasks.publish]
-description = "Copy one linux/amd64 server binary to host yoda"
-depends = ["build:linux"]
-usage = 'arg "<service>" help="Command name under protohackers/cmd"'
-run = 'scp out/linux_amd64/${usage_service} yoda:'
+description = "Cross-compile one command for linux/amd64 and scp it to host yoda"
+usage = 'arg "<command>" help="<project>/<command>, for ./<project>/cmd/<command>"'
+env = { GOOS = "linux", GOARCH = "amd64" }
+run = '''
+project=${usage_command%/*}
+cmd=${usage_command##*/}
+[ -d "$project/cmd/$cmd" ] || { echo "no command at ./$project/cmd/$cmd" >&2; exit 2; }
+go build -o "out/linux_amd64/$project/" "./$project/cmd/$cmd"
+scp "out/linux_amd64/$project/$cmd" yoda:
+'''
